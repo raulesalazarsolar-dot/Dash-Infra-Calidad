@@ -1,0 +1,38 @@
+name: Actualizar Dashboard Infra
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Instalar librerias necesarias
+        run: |
+          pip install Office365-REST-Python-Client pandas openpyxl
+
+      - name: Ejecutar el script
+        env:
+          SP_USER: ${{ secrets.SP_USER }}
+          SP_PASS: ${{ secrets.SP_PASS }}
+        run: python main.py 
+
+      - name: Publicar el HTML en GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: gh-pages
