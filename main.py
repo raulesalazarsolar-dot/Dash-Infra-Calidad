@@ -59,7 +59,7 @@ def extraer_dato_seguro(properties, key):
     return limpiar(val)
 
 def procesar_foto_attachment(ctx, item_id, json_raw):
-    """Descarga la foto y la devuelve en base64 en su TAMAÑO ORIGINAL"""
+    """Descarga la foto y la ajusta en Alta Resolución (HD) para no superar el límite de GitHub"""
     if not json_raw: return None
     try:
         data = json.loads(json_raw) if isinstance(json_raw, str) else json_raw
@@ -74,9 +74,15 @@ def procesar_foto_attachment(ctx, item_id, json_raw):
                 ctx.web.get_file_by_server_relative_url(url).download(f).execute_query()
         
         if os.path.exists(local) and os.path.getsize(local) > 0:
-            with open(local, "rb") as image_file:
-                # Se lee directamente el archivo sin redimensionar ni usar PIL
-                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+            from PIL import Image
+            with Image.open(local) as img:
+                if img.mode != "RGB": img = img.convert("RGB")
+                # Tamaño HD: Se ven perfectas pero reducen el peso drásticamente
+                img.thumbnail((1200, 1200))
+                buf = io.BytesIO()
+                # Calidad 85 es casi indistinguible del original para el ojo humano
+                img.save(buf, format='JPEG', quality=85, optimize=True)
+                encoded_string = base64.b64encode(buf.getvalue()).decode('utf-8')
                 return f"data:image/jpeg;base64,{encoded_string}"
     except: return None
     return None
