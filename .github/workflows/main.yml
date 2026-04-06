@@ -22,7 +22,7 @@ jobs:
 
       - name: Instalar librerias necesarias
         run: |
-          pip install Office365-REST-Python-Client pandas openpyxl
+          pip install Office365-REST-Python-Client pandas openpyxl Pillow
 
       - name: Ejecutar el script
         env:
