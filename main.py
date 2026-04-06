@@ -523,4 +523,636 @@ def generar_html_moderno(db_json, titulo_dashboard):
             
             if (mVal !== 'ALL') {{
                 let dMes = 'Sin Fecha';
-                if(d.f_lev && d.f_lev !== '--' && d.f_lev
+                if(d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {{
+                    let p = d.f_lev.split('-');
+                    if(p.length >= 3) dMes = p[1] + '-' + p[2];
+                }}
+                if (dMes !== mVal) return false;
+            }}
+
+            let miClase = d.clase || '';
+            if (cVal !== 'ALL' && miClase !== cVal) return false;
+            
+            if (eVal !== 'ALL' && d.ejecutor !== eVal) return false;
+            if (uVal !== 'ALL' && d.ubicacion !== uVal) return false;
+            if (pVal !== 'ALL' && d.prioridad !== pVal) return false;
+            
+            return true;
+        }});
+    }}
+
+    function applyFilters() {{
+        currentChartData = getFilteredData();
+        
+        let ok = 0; let pre = 0;
+        currentChartData.forEach(d => {{ 
+            if (d.status === 'realizada' || d.status === 'cerrada') ok++; 
+            else if (d.status === 'precierre') pre++;
+        }});
+        const total = currentChartData.length;
+        
+        document.getElementById('k_total').innerText = total;
+        document.getElementById('k_ok').innerText = ok;
+        if(document.getElementById('k_pre')) document.getElementById('k_pre').innerText = pre;
+        
+        let pendCount = total - ok - pre;
+        document.getElementById('k_pend').innerText = pendCount;
+        
+        let perc = total > 0 ? Math.round((ok/total)*100) : 0;
+        document.getElementById('k_perc').innerText = perc + '%';
+        const bar = document.getElementById('bar_fill');
+        bar.style.width = perc + '%';
+        bar.style.backgroundColor = perc > 80 ? '#10b981' : (perc > 40 ? '#f59e0b' : '#ef4444');
+
+        if(appState.view === 'list') renderList(currentChartData);
+        else drawCharts(currentChartData);
+    }}
+
+    function renderList(data) {{
+        const container = document.getElementById('list_container');
+        container.innerHTML = '';
+        
+        data.forEach(d => {{
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.onclick = function() {{ 
+                renderDetail(d.key_id); 
+                document.querySelectorAll('.list-item').forEach(i=>i.classList.remove('selected'));
+                item.classList.add('selected');
+            }};
+            
+            let stText = '⚠️ PEND'; let stClass = 'st-pend';
+            if (d.status === 'realizada' || d.status === 'cerrada') {{ stText='✅ REALIZADA'; stClass='st-ok'; }}
+            else if (d.status === 'precierre') {{ stText='🔍 PRECIERRE'; stClass='st-proc'; }}
+            else if (d.status === 'programado') {{ stText='📅 PROG'; stClass='st-prog'; }}
+            else if (d.status === 'en proceso' || d.status === 'tratando') {{ stText='🔨 PROCESO'; stClass='st-proc'; }}
+            else {{ stText='📂 PEND'; stClass='st-pend'; }}
+            
+            let idDisplay = d.ot ? `OT: ${{d.ot}}` : (d.tag ? d.tag : '#' + d.id_real);
+            
+            item.innerHTML = `
+                <div class="li-top"><span>${{idDisplay}}</span><span>Sem: ${{d.semana}}</span></div>
+                <div class="li-title">${{d.titulo}}</div>
+                <div class="li-btm">
+                    <span class="tag ${{stClass}}">${{stText}}</span>
+                    <span style="color:var(--muted); font-weight:700;">👷 ${{d.ejecutor.split(' ')[0]}}</span>
+                </div>
+            `;
+            container.appendChild(item);
+        }});
+    }}
+
+    function renderDetail(key) {{
+        document.getElementById('empty_state').style.display='none';
+        document.getElementById('detail_view').style.display='block';
+        const d = db[key];
+        
+        document.getElementById('d_title').innerText = d.titulo;
+        document.getElementById('d_tag').innerText = d.tag ? `TAG: ${{d.tag}}` : (d.ot ? `OT: ${{d.ot}}` : 'Sin ID');
+        
+        const stBadge = document.getElementById('d_status');
+        if (d.status === 'realizada' || d.status === 'cerrada') {{ stBadge.innerText = '✅ REALIZADA'; stBadge.className = 'tag st-ok'; }}
+        else if (d.status === 'precierre') {{ stBadge.innerText = '🔍 PRECIERRE'; stBadge.className = 'tag st-proc'; }}
+        else if (d.status === 'programado') {{ stBadge.innerText = '📅 PROGRAMADA'; stBadge.className = 'tag st-prog'; }}
+        else if (d.status === 'en proceso' || d.status === 'tratando') {{ stBadge.innerText = '🔨 EN PROCESO'; stBadge.className = 'tag st-proc'; }}
+        else {{ stBadge.innerText = '⚠️ PENDIENTE'; stBadge.className = 'tag st-pend'; }}
+        
+        let pl = d.prioridad;
+        if(pl==='0' || pl==='calavera') pl='<span class="prio-flag p-crit">🚨 CRÍTICA</span>';
+        else if(pl==='1') pl='<span class="prio-flag p-alta">🔴 ALTA</span>';
+        else if(pl==='2') pl='<span class="prio-flag p-med">🟡 MEDIA</span>';
+        else pl='<span class="prio-flag p-baja">🟢 BAJA</span>';
+        document.getElementById('d_prio_lbl').innerHTML = pl;
+
+        if (d.clase && d.clase.toLowerCase().includes('calidad')) {{
+            document.getElementById('ticket_progress_wrapper').style.display = 'block';
+            let stepsActive = 1; 
+            if (d.has_asignacion) stepsActive = 2;
+            if (d.has_ejecutado) stepsActive = 3;
+            if (d.has_cierre) stepsActive = 4;
+            
+            let fillWidth = ((stepsActive - 1) / 3) * 80;
+            document.getElementById('ticket_step_fill').style.width = fillWidth + '%';
+            
+            for(let i=1; i<=4; i++) {{
+                let el = document.getElementById('t_step_' + i);
+                el.classList.remove('active', 'current');
+                if (i <= stepsActive) {{
+                    el.classList.add('active');
+                }}
+                if (i === stepsActive) {{
+                    el.classList.add('current');
+                }}
+            }}
+        }} else {{
+            document.getElementById('ticket_progress_wrapper').style.display = 'none';
+        }}
+
+        const grid = document.getElementById('d_grid');
+        grid.innerHTML = '';
+        const createItem = (label, val) => `<div class="dg-item"><small>${{label}}</small><strong>${{val||'--'}}</strong></div>`;
+        
+        grid.innerHTML += createItem('🏷️ Clase', d.clase);
+        grid.innerHTML += createItem('👷 Responsable', d.ejecutor);
+        grid.innerHTML += createItem('📍 Ubicación', d.ubicacion);
+        grid.innerHTML += createItem('📅 Levantamiento', d.f_lev);
+        grid.innerHTML += createItem('🏁 Cierre', d.f_cie);
+        grid.innerHTML += createItem('📆 Semana', d.semana);
+        if (d.ot) grid.innerHTML += createItem('⚙️ OT SAP', d.ot);
+        
+        document.getElementById('box_obs1').style.display = 'block';
+        document.getElementById('lbl_obs_title').innerText = '📝 Observación';
+        document.getElementById('d_obs').innerText = d.observacion1 || 'Sin observaciones';
+        
+        if (d.observacion2) {{
+            document.getElementById('box_obs2').style.display = 'block';
+            document.getElementById('lbl_obs_title2').innerText = '📝 Observación 2';
+            document.getElementById('d_obs2').innerText = d.observacion2;
+        }} else {{
+            document.getElementById('box_obs2').style.display = 'none';
+        }}
+        
+        if ((d.imgs_antes && d.imgs_antes.length > 0) || (d.imgs_despues && d.imgs_despues.length > 0)) {{
+            document.getElementById('card_img_single').style.display = 'none';
+            document.getElementById('card_img_a').style.display = 'block';
+            document.getElementById('card_img_d').style.display = 'block';
+            setupCarousel('d_img_a', d.imgs_antes || []);
+            setupCarousel('d_img_d', d.imgs_despues || []);
+            document.getElementById('d_gallery_sec').style.display = 'flex';
+        }} else {{
+            document.getElementById('d_gallery_sec').style.display = 'none';
+        }}
+    }}
+
+    function setupCarousel(elementId, images) {{
+        const container = document.getElementById(elementId);
+        container.innerHTML = '';
+        if (!images || images.length === 0) {{
+            container.innerHTML = '<div style="height:100px; display:flex; align-items:center; justify-content:center; color:#ccc; font-style:italic; border: 1px dashed #cbd5e1; border-radius: 4px; width: 100%;">Sin evidencia</div>';
+            return;
+        }}
+        carousels[elementId] = {{ idx: 0, imgs: images }};
+        renderCarousel(elementId);
+    }}
+
+    function renderCarousel(id) {{
+        const c = carousels[id];
+        const container = document.getElementById(id);
+        const currentSrc = c.imgs[c.idx];
+        let navHtml = '';
+        if (c.imgs.length > 1) {{
+            navHtml = `
+                <button class="nav-btn nav-prev" onclick="moveCarousel('${{id}}', -1)">❮</button>
+                <button class="nav-btn nav-next" onclick="moveCarousel('${{id}}', 1)">❯</button>
+                <div class="img-counter">${{c.idx + 1}} / ${{c.imgs.length}}</div>
+            `;
+        }}
+        container.innerHTML = `<img src="${{currentSrc}}" class="gal-img" onclick="openModal(this.src)">${{navHtml}}`;
+    }}
+
+    window.moveCarousel = function(id, dir) {{
+        const c = carousels[id];
+        c.idx += dir;
+        if (c.idx < 0) c.idx = c.imgs.length - 1;
+        if (c.idx >= c.imgs.length) c.idx = 0;
+        renderCarousel(id);
+        event.stopPropagation();
+    }}
+
+    function openModal(src) {{
+        document.getElementById('modalImg').src = src;
+        document.getElementById('modal').style.display = 'flex';
+    }}
+
+    function showDataModal(title, filterFn) {{
+        let html = `<div class="dm-header">
+            <h3>📊 Desglose: ${{title}}</h3>
+            <button class="dm-close" onclick="document.getElementById('data_modal').style.display='none'">&times;</button>
+        </div>
+        <div class="dm-body">
+            <table class="dm-table">
+                <thead><tr><th>ID / TAG</th><th>Semana</th><th>Título / Actividad</th><th>Responsable</th><th>Estado</th><th>Prioridad</th></tr></thead>
+                <tbody>`;
+
+        let found = false;
+        currentChartData.forEach(d => {{
+            if (filterFn(d)) {{
+                found = true;
+                let stColor = (d.status==='realizada' || d.status==='cerrada') ? '#166534' : (d.status==='pendiente' || d.status==='abierta' ? '#991b1b' : '#92400e');
+                let idDisplay = d.ot ? d.ot : (d.tag ? d.tag : '#' + d.id_real);
+                
+                let pText = 'Baja'; let pColor = '#64748b';
+                if(d.prioridad==='0' || d.prioridad==='calavera') {{ pText='☠️ CRÍTICA'; pColor='#dc2626'; }}
+                else if(d.prioridad==='1') {{ pText='🚨 ALTA'; pColor='#ea580c'; }}
+                else if(d.prioridad==='2') {{ pText='⚠️ MEDIA'; pColor='#d97706'; }}
+
+                html += `<tr onclick="document.getElementById('data_modal').style.display='none'; document.getElementById('btn_tab_list').click(); setTimeout(() => renderDetail('${{d.key_id}}'), 100);">
+                    <td style="font-weight:700;">${{idDisplay}}</td>
+                    <td>${{d.semana}}</td>
+                    <td>${{d.titulo}}</td>
+                    <td>${{d.ejecutor.split(' ')[0]}}</td>
+                    <td style="color:${{stColor}}; font-weight:700; text-transform:uppercase;">${{d.status}}</td>
+                    <td style="color:${{pColor}}; font-weight:700;">${{pText}}</td>
+                </tr>`;
+            }}
+        }});
+
+        if (!found) html += `<tr><td colspan="6" style="text-align:center; padding: 30px; color:var(--muted);">No hay registros para esta selección</td></tr>`;
+        html += `</tbody></table></div>`;
+        document.getElementById('data_modal_content').innerHTML = html;
+        document.getElementById('data_modal').style.display = 'flex';
+    }}
+
+    function getFreshCanvas(id) {{
+        const old = document.getElementById(id);
+        if(!old) return null;
+        const container = old.parentElement;
+        container.innerHTML = `<canvas id="${{id}}"></canvas>`;
+        return document.getElementById(id);
+    }}
+
+    function drawCharts(data) {{
+        if(!data || data.length === 0) return;
+        
+        const chartIds = ['chart1', 'chart2', 'chart3', 'chart4', 'chart5', 'chart6'];
+        chartIds.forEach(id => {{
+            if (chartInstances[id]) {{ chartInstances[id].destroy(); chartInstances[id] = null; }}
+        }});
+
+        let stats = {{ ok:0, pend:0, pre:0, prog:0, ex:{{}}, loc:{{}}, wCounts:{{}}, cCounts:{{}}, mCounts:{{}} }};
+        weeks.forEach(w => stats.wCounts[w] = {{total:0, ok:0, pre:0}});
+        
+        data.forEach(d => {{
+            let isOk = (d.status === 'realizada' || d.status === 'cerrada');
+            let isPre = (d.status === 'precierre');
+            if(isOk) stats.ok++; 
+            else if(isPre) stats.pre++;
+            else stats.pend++;
+            
+            let miClase = d.clase || 'General';
+            stats.cCounts[miClase] = (stats.cCounts[miClase]||0)+1;
+
+            const e = d.ejecutor || 'Sin Asignar';
+            if(!stats.ex[e]) stats.ex[e]={{ok:0, pend:0}};
+            if(isOk) stats.ex[e].ok++; else stats.ex[e].pend++;
+
+            const l = d.ubicacion || 'Sin Ubicación';
+            if(!stats.loc[l]) stats.loc[l]={{total:0, critical:0}};
+            stats.loc[l].total++;
+            if(d.prioridad==='0' || d.prioridad==='calavera') stats.loc[l].critical++;
+            
+            if(d.semana!=="S/N" && stats.wCounts[d.semana]) {{
+                stats.wCounts[d.semana].total++;
+                if(isOk) stats.wCounts[d.semana].ok++;
+                if(isPre) stats.wCounts[d.semana].pre++;
+            }}
+
+            let catMensual = null;
+            let sortKey = null;
+            if (d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {{
+                let p = d.f_lev.split('-'); 
+                if (p.length >= 3) {{
+                    let y = parseInt(p[2]);
+                    let m = p[1];
+                    if (y < 2026) {{
+                        catMensual = 'Arrastre 24/25';
+                        sortKey = '0000-00'; 
+                    }} else {{
+                        catMensual = m + '-' + y;
+                        sortKey = y + '-' + m; 
+                    }}
+                }}
+            }}
+            if (catMensual) {{
+                if (!stats.mCounts[catMensual]) {{
+                    stats.mCounts[catMensual] = {{ total:0, ok:0, pre:0, sortKey: sortKey }};
+                }}
+                stats.mCounts[catMensual].total++;
+                if(isOk) stats.mCounts[catMensual].ok++;
+                if(isPre) stats.mCounts[catMensual].pre++;
+            }}
+        }});
+
+        const commonOpts = {{ maintainAspectRatio:false, responsive:true, animation: {{ duration: 800, easing: 'easeOutQuart' }}, plugins: {{ datalabels: {{ display: false }}, legend: {{ labels: {{ usePointStyle: true, boxWidth: 8 }} }} }} }};
+        document.querySelectorAll('.chart-card').forEach(c => c.style.opacity = '1');
+
+        let finalLabelsMeses = Object.keys(stats.mCounts).sort((a, b) => {{
+            return stats.mCounts[a].sortKey.localeCompare(stats.mCounts[b].sortKey);
+        }});
+
+        const c6DataLevantadas = finalLabelsMeses.map(m => stats.mCounts[m].total);
+        const c6DataCerradas = finalLabelsMeses.map(m => stats.mCounts[m].ok);
+        const c6DataPrecierre = finalLabelsMeses.map(m => stats.mCounts[m].pre);
+
+        let c6Datasets = [
+            {{
+                label: 'Levantadas', data: c6DataLevantadas,
+                borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#fff', pointBorderColor: '#3b82f6', pointRadius: 4
+            }},
+            {{
+                label: 'Precierre', data: c6DataPrecierre,
+                borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#fff', pointBorderColor: '#f59e0b', pointRadius: 4
+            }},
+            {{
+                label: 'Cerradas', data: c6DataCerradas,
+                borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#fff', pointBorderColor: '#10b981', pointRadius: 4
+            }}
+        ];
+
+        chartInstances['chart6'] = new Chart(getFreshCanvas('chart6'), {{
+            type: 'line',
+            data: {{
+                labels: finalLabelsMeses,
+                datasets: c6Datasets
+            }},
+            options: {{
+                ...commonOpts,
+                interaction: {{ mode: 'index', intersect: false }},
+                scales: {{
+                    x: {{ grid: {{ display: false }} }},
+                    y: {{ beginAtZero: true, grid: {{ color: '#e2e8f0' }} }}
+                }},
+                plugins: {{
+                    ...commonOpts.plugins,
+                    legend: {{ position: 'top' }}
+                }}
+            }}
+        }});
+
+        let cLabels = ['Cerradas','Precierre','Pendientes'];
+        let cDataDoughnut = [stats.ok, stats.pre, stats.pend];
+        let cBg = ['#10b981','#f59e0b','#ef4444'];
+
+        chartInstances['chart1'] = new Chart(getFreshCanvas('chart1'), {{ 
+            type: 'doughnut', 
+            data: {{ 
+                labels: cLabels, 
+                datasets: [{{ 
+                    data: cDataDoughnut, backgroundColor: cBg, borderWidth: 2, borderColor: '#fff', hoverOffset: 10 
+                }}] 
+            }}, 
+            options: {{ 
+                ...commonOpts, cutout: '70%', 
+                plugins: {{ ...commonOpts.plugins, legend: {{ position: 'bottom' }} }}, 
+                onClick: (e, els, ch) => {{ 
+                    if(els.length>0) {{
+                        showDataModal(ch.data.labels[els[0].index], d => {{ 
+                            let st = ch.data.labels[els[0].index]; 
+                            if(st==='Cerradas') return d.status==='realizada' || d.status==='cerrada'; 
+                            if(st==='Precierre') return d.status==='precierre';
+                            if(st==='Pendientes') return d.status==='pendiente' || d.status==='abierta'; 
+                            return d.status==='programado' || d.status==='tratando'; 
+                        }}); 
+                    }}
+                }} 
+            }}
+        }});
+        
+        chartInstances['chart2'] = new Chart(getFreshCanvas('chart2'), {{ 
+            type: 'pie', 
+            data: {{ labels:Object.keys(stats.cCounts), datasets:[{{ data:Object.values(stats.cCounts), backgroundColor:['#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#d946ef','#f59e0b'], borderWidth: 1, borderColor: '#fff' }}] }}, 
+            options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, legend: {{ position: 'right' }} }}, onClick: (e, els, ch) => {{ if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => (d.clase || 'General') === ch.data.labels[els[0].index]); }} }}
+        }});
+        
+        const sortedEx = Object.entries(stats.ex).sort((a,b)=>(b[1].ok+b[1].pend)-(a[1].ok+a[1].pend)).slice(0,10);
+        chartInstances['chart3'] = new Chart(getFreshCanvas('chart3'), {{ 
+            type: 'bar', 
+            data: {{ labels: sortedEx.map(x=>x[0]), datasets: [ {{ label:'Pendientes', data:sortedEx.map(x=>x[1].pend), backgroundColor:'#fee2e2', borderColor:'#ef4444', borderWidth: 1, borderRadius: 4 }}, {{ label:'Cerradas', data:sortedEx.map(x=>x[1].ok), backgroundColor:'#dcfce7', borderColor:'#10b981', borderWidth: 1, borderRadius: 4 }} ]}}, 
+            options: {{ ...commonOpts, indexAxis: 'y', scales: {{ x: {{ stacked: true, grid: {{ display: false }} }}, y: {{ stacked: true, grid: {{ display: false }} }} }}, onClick: (e, els, ch) => {{ if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => d.ejecutor === ch.data.labels[els[0].index]); }} }}
+        }});
+
+        const sortedLocs = Object.entries(stats.loc).sort((a,b)=>b[1].total - a[1].total).slice(0, 20); 
+        const labelsLoc = sortedLocs.map(x=>x[0]);
+        const dataCounts = sortedLocs.map(x=>x[1].total);
+        
+        const totalHallazgos = dataCounts.reduce((a,b)=>a+b, 0);
+        let sumAcc = 0;
+        const dataAcumulado = dataCounts.map(count => {{
+            sumAcc += count;
+            return totalHallazgos > 0 ? parseFloat(((sumAcc / totalHallazgos) * 100).toFixed(1)) : 0;
+        }});
+
+        chartInstances['chart4'] = new Chart(getFreshCanvas('chart4'), {{
+            type: 'bar',
+            data: {{
+                labels: labelsLoc,
+                datasets: [
+                    {{
+                        type: 'line', label: '% Acumulado', data: dataAcumulado,
+                        borderColor: '#ef4444', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#ef4444',
+                        pointRadius: 5, pointHoverRadius: 7, fill: false, yAxisID: 'yPercentage', tension: 0.3, zIndex: 10
+                    }},
+                    {{
+                        type: 'bar', label: 'Cantidad de Hallazgos', data: dataCounts,
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: '#2563eb', borderWidth: 1, borderRadius: 5, yAxisID: 'yCount', zIndex: 5
+                    }}
+                ]
+            }},
+            options: {{
+                ...commonOpts,
+                interaction: {{ mode: 'index', intersect: false }}, 
+                scales: {{
+                    yCount: {{ type: 'linear', display: true, position: 'left', title: {{ display: true, text: 'Cantidad de Hallazgos', font: {{ weight: 'bold' }} }}, grid: {{ drawOnChartArea: true, color: '#e2e8f0' }}, beginAtZero: true }},
+                    yPercentage: {{ type: 'linear', display: true, position: 'right', title: {{ display: true, text: '% Acumulado', font: {{ weight: 'bold' }} }}, min: 0, max: 100, grid: {{ drawOnChartArea: false }}, ticks: {{ callback: value => value + '%' }} }},
+                    x: {{ grid: {{ display: false }}, ticks: {{ autoSkip: false, maxRotation: 45, minRotation: 45, font: {{ size: 10 }} }} }}
+                }},
+                plugins: {{
+                    ...commonOpts.plugins,
+                    legend: {{ position: 'top' }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: function(context) {{
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.dataset.yAxisID === 'yPercentage') {{ label += context.parsed.y + '%'; }} 
+                                else {{ label += context.parsed.y; }}
+                                return label;
+                            }}
+                        }}
+                    }}
+                }},
+                onClick: (e, els, ch) => {{
+                    if(els.length>0) {{
+                        const chartElement = els.find(el => el.datasetIndex === 1);
+                        if(chartElement) {{
+                            const index = chartElement.index;
+                            const label = ch.data.labels[index];
+                            showDataModal('Ubicación: ' + label, d => d.ubicacion === label);
+                        }}
+                    }}
+                }}
+            }}
+        }});
+
+        const scatterData = Object.entries(stats.loc)
+            .filter(([name, stat]) => stat.total > 0)
+            .map(([name, stat]) => ({{ x: stat.total, y: stat.critical, label: name }}));
+            
+        const avgX = scatterData.length > 0 ? scatterData.reduce((sum, p) => sum + p.x, 0) / scatterData.length : 0;
+        const avgY = scatterData.length > 0 ? scatterData.reduce((sum, p) => sum + p.y, 0) / scatterData.length : 0;
+
+        chartInstances['chart5'] = new Chart(getFreshCanvas('chart5'), {{
+            type: 'scatter',
+            data: {{ datasets: [{{ label: 'Ubicaciones', data: scatterData, backgroundColor: 'rgba(239, 68, 68, 0.6)', borderColor: '#dc2626', borderWidth: 1, pointRadius: 6, pointHoverRadius: 9, pointHitRadius: 10 }}] }},
+            options: {{
+                ...commonOpts,
+                scales: {{
+                    x: {{ type: 'linear', position: 'bottom', title: {{ display: true, text: 'Frecuencia Total de Hallazgos', font: {{ weight: 'bold' }} }}, beginAtZero: true, grid: {{ color: '#e2e8f0' }} }},
+                    y: {{ type: 'linear', title: {{ display: true, text: 'Cantidad de Hallazgos Críticos (Prio 0)', font: {{ weight: 'bold' }} }}, beginAtZero: true, grid: {{ color: '#e2e8f0' }} }}
+                }},
+                plugins: {{
+                    ...commonOpts.plugins,
+                    legend: {{ display: false }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: (ctx) => {{
+                                const p = ctx.raw;
+                                return [`📍 ${{p.label}}`, `📊 Total: ${{p.x}}`, `☠️ Críticos: ${{p.y}}`];
+                            }}
+                        }}
+                    }},
+                    afterDraw: (chart) => {{
+                        if (scatterData.length === 0) return;
+                        const {{ctx, scales: {{x, y}}}} = chart;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = 'rgba(100, 116, 139, 0.5)';
+                        ctx.setLineDash([6, 6]);
+                        
+                        const pixelX = x.getPixelForValue(avgX);
+                        ctx.moveTo(pixelX, y.top);
+                        ctx.lineTo(pixelX, y.bottom);
+                        
+                        const pixelY = y.getPixelForValue(avgY);
+                        ctx.moveTo(x.left, pixelY);
+                        ctx.lineTo(x.right, pixelY);
+                        
+                        ctx.stroke();
+                        ctx.restore();
+                    }}
+                }},
+                onClick: (e, els, ch) => {{
+                    if(els.length>0) {{
+                        const index = els[0].index;
+                        const dataPoint = ch.data.datasets[0].data[index];
+                        showDataModal('Ubicación: ' + dataPoint.label, d => d.ubicacion === dataPoint.label);
+                    }}
+                }}
+            }}
+        }});
+    }}
+
+    window.onload = () => {{
+        buildFilters();
+        applyFilters();
+    }};
+    </script>
+</body></html>
+    """
+    
+    with open(OUTPUT_HTML, "w", encoding="utf-8") as f: f.write(full_html)
+    print(f"✅ REPORTE {titulo_dashboard} GUARDADO CON ÉXITO")
+
+# ==========================================
+# 5. MAIN EJECUCIÓN
+# ==========================================
+def main():
+    try:
+        print(f"🚀 INICIANDO EXTRACCIÓN DE SHAREPOINT...")
+        print(f"📡 Conectando a Lista Principal: {LIST_NAME}...")
+        
+        ctx = ClientContext(SITE_URL).with_credentials(UserCredential(USERNAME, PASSWORD))
+        sp_list = ctx.web.lists.get_by_title(LIST_NAME)
+        
+        columnas_req = ["Id", "Title", "field_1", "field_9", "field_10", "field_5", "field_7", "field_8", "field_2", "field_3", "field_4", "field_14", "field_15", "field_13", "field_11", "field_12", "Antes", "Despues", "Estado"]
+        
+        items = sp_list.items.select(columnas_req).top(5000).get().execute_query()
+
+        db_act = {}
+        total_items = len(items)
+        print(f"   ✅ Descargados {total_items} registros de Actividades. Extrayendo imágenes originales...")
+        
+        for idx, item in enumerate(items):
+            print(f"      ... Procesando Actividad {idx+1} de {total_items}", end='\r')
+            p = item.properties
+            item_id = int(p.get("Id", 0))
+            act_str = limpiar(p.get("field_4"))
+            tag_id = limpiar(p.get("Title"))
+            
+            ejecutor = extraer_dato_seguro(p, "field_9")
+            status_txt = normalizar_texto(limpiar(p.get("field_11")))
+            estado_txt = normalizar_texto(limpiar(p.get("Estado")))
+            clase_str = extraer_dato_seguro(p, "field_12").title() or "General"
+
+            has_asignacion = bool(ejecutor and ejecutor.strip() and ejecutor.lower() != "sin asignar" and ejecutor != "0")
+            has_ejecutado = any(k in status_txt for k in ['ok', 'listo', 'cerrad', 'realiza', 'complet'])
+            has_cierre = any(k in estado_txt for k in ['cerrad', 'ok', 'complet'])
+            is_calidad = "calidad" in clase_str.lower()
+
+            if is_calidad:
+                if has_cierre: 
+                    status = "realizada"
+                elif has_ejecutado: 
+                    status = "precierre"
+                else: 
+                    status = "pendiente"
+            else:
+                if has_cierre or has_ejecutado:
+                    status = "realizada"
+                else:
+                    status = "pendiente"
+
+            prio_raw = normalizar_texto(limpiar(p.get("field_10")))
+            if "calavera" in prio_raw or "☠" in prio_raw or prio_raw == "0": prio = "0"
+            elif "alta" in prio_raw or prio_raw == "1": prio = "1"
+            elif "media" in prio_raw or prio_raw == "2": prio = "2"
+            else: prio = "3"
+
+            imgs_a = []
+            im = procesar_foto_attachment(ctx, item_id, p.get("Antes"))
+            if im: imgs_a.append(im)
+            
+            imgs_d = []
+            im_d = procesar_foto_attachment(ctx, item_id, p.get("Despues"))
+            if im_d: imgs_d.append(im_d)
+
+            key_id = f"MTTO_{item_id}"
+            db_act[key_id] = {
+                "key_id": key_id, "id_real": item_id, 
+                "titulo": act_str or tag_id or f"Actividad #{item_id}", 
+                "tag": tag_id,
+                "semana": limpiar(p.get("field_1")) or "S/N", 
+                "ejecutor": ejecutor or "Sin Asignar",
+                "prioridad": prio, 
+                "ubicacion": limpiar(p.get("field_5")) or "Sin Ubicación",
+                "ot": limpiar(p.get("field_7")), 
+                "solped": limpiar(p.get("field_8")), 
+                "f_lev": formatear_fecha(p.get("field_2")), 
+                "f_cie": formatear_fecha(p.get("field_3")),
+                "actividad": act_str, 
+                "observacion1": limpiar(p.get("field_14")), 
+                "observacion2": limpiar(p.get("field_15")), 
+                "status": status, 
+                "has_asignacion": has_asignacion,
+                "has_ejecutado": has_ejecutado,
+                "has_cierre": has_cierre,
+                "clase": clase_str, 
+                "origen": "act", 
+                "imgs_antes": imgs_a, 
+                "imgs_despues": imgs_d
+            }
+        print(f"\n   ✅ Total Actividades procesadas: {len(db_act)}")
+        
+        generar_html_moderno(db_act, "Actividades Infraestructura")
+
+    except Exception as e: 
+        print(f"\n❌ Error Fatal en script: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    main()
