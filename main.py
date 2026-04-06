@@ -415,7 +415,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         html += createSelect('f_clase', 'Clase', [...new Set(records.map(x=>x.clase))].sort());
         html += createSelect('f_exec', 'Ejecutor', [...new Set(records.map(x=>x.ejecutor))].sort());
         html += createSelect('f_ubi', 'Ubicación / Área', [...new Set(records.map(x=>x.ubicacion))].sort());
-        html += `<div class="f-group"><label>Prioridad</label><select id="f_prio" onchange="applyFilters()"><option value="ALL">Todas</option><option value="calavera">☠️ Muy Crítica</option><option value="0">🚩 Alta / Crítica</option><option value="1">⚠️ Media</option><option value="2">🟢 Baja</option></select></div>`;
+        html += `<div class="f-group"><label>Prioridad / Criticidad</label><select id="f_prio" onchange="applyFilters()"><option value="ALL">Todas</option><option value="1">🚨 Crítica</option><option value="2">🟡 Mayor</option><option value="3">🟢 Menor</option></select></div>`;
         
         if (appState.view === 'charts') {{
             html += `<div class="f-group"><label>Estado</label><select id="f_status" onchange="applyFilters()"><option value="ALL">Todos</option><option value="ok">✅ Realizadas / Cerradas</option><option value="pend">⚠️ Pendientes / En Proceso</option></select></div>`;
@@ -624,10 +624,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
         else {{ stBadge.innerText = '⚠️ PENDIENTE'; stBadge.className = 'tag st-pend'; }}
         
         let pl = d.prioridad;
-        if(pl==='0' || pl==='calavera') pl='<span class="prio-flag p-crit">🚨 CRÍTICA</span>';
-        else if(pl==='1') pl='<span class="prio-flag p-alta">🔴 ALTA</span>';
-        else if(pl==='2') pl='<span class="prio-flag p-med">🟡 MEDIA</span>';
-        else pl='<span class="prio-flag p-baja">🟢 BAJA</span>';
+        if(pl==='1') pl='<span class="prio-flag p-crit">🚨 CRÍTICA</span>';
+        else if(pl==='2') pl='<span class="prio-flag p-med">🟡 MAYOR</span>';
+        else pl='<span class="prio-flag p-baja">🟢 MENOR</span>';
         document.getElementById('d_prio_lbl').innerHTML = pl;
 
         if (d.clase && d.clase.toLowerCase().includes('calidad')) {{
@@ -747,10 +746,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
                 let stColor = (d.status==='realizada' || d.status==='cerrada') ? '#166534' : (d.status==='pendiente' || d.status==='abierta' ? '#991b1b' : '#92400e');
                 let idDisplay = d.ot ? d.ot : (d.tag ? d.tag : '#' + d.id_real);
                 
-                let pText = 'Baja'; let pColor = '#64748b';
-                if(d.prioridad==='0' || d.prioridad==='calavera') {{ pText='☠️ CRÍTICA'; pColor='#dc2626'; }}
-                else if(d.prioridad==='1') {{ pText='🚨 ALTA'; pColor='#ea580c'; }}
-                else if(d.prioridad==='2') {{ pText='⚠️ MEDIA'; pColor='#d97706'; }}
+                let pText = 'MENOR'; let pColor = '#64748b';
+                if(d.prioridad==='1') {{ pText='🚨 CRÍTICA'; pColor='#dc2626'; }}
+                else if(d.prioridad==='2') {{ pText='🟡 MAYOR'; pColor='#d97706'; }}
 
                 html += `<tr onclick="document.getElementById('data_modal').style.display='none'; document.getElementById('btn_tab_list').click(); setTimeout(() => renderDetail('${{d.key_id}}'), 100);">
                     <td style="font-weight:700;">${{idDisplay}}</td>
@@ -805,7 +803,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
             const l = d.ubicacion || 'Sin Ubicación';
             if(!stats.loc[l]) stats.loc[l]={{total:0, critical:0}};
             stats.loc[l].total++;
-            if(d.prioridad==='0' || d.prioridad==='calavera') stats.loc[l].critical++;
+            if(d.prioridad==='1') stats.loc[l].critical++;
             
             if(d.semana!=="S/N" && stats.wCounts[d.semana]) {{
                 stats.wCounts[d.semana].total++;
@@ -1007,7 +1005,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
                 ...commonOpts,
                 scales: {{
                     x: {{ type: 'linear', position: 'bottom', title: {{ display: true, text: 'Frecuencia Total de Hallazgos', font: {{ weight: 'bold' }} }}, beginAtZero: true, grid: {{ color: '#e2e8f0' }} }},
-                    y: {{ type: 'linear', title: {{ display: true, text: 'Cantidad de Hallazgos Críticos (Prio 0)', font: {{ weight: 'bold' }} }}, beginAtZero: true, grid: {{ color: '#e2e8f0' }} }}
+                    y: {{ type: 'linear', title: {{ display: true, text: 'Cantidad de Hallazgos Críticos (Prio 1)', font: {{ weight: 'bold' }} }}, beginAtZero: true, grid: {{ color: '#e2e8f0' }} }}
                 }},
                 plugins: {{
                     ...commonOpts.plugins,
@@ -1016,7 +1014,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
                         callbacks: {{
                             label: (ctx) => {{
                                 const p = ctx.raw;
-                                return [`📍 ${{p.label}}`, `📊 Total: ${{p.x}}`, `☠️ Críticos: ${{p.y}}`];
+                                return [`📍 ${{p.label}}`, `📊 Total: ${{p.x}}`, `🚨 Críticos: ${{p.y}}`];
                             }}
                         }}
                     }},
@@ -1074,7 +1072,7 @@ def main():
         ctx = ClientContext(SITE_URL).with_credentials(UserCredential(USERNAME, PASSWORD))
         sp_list = ctx.web.lists.get_by_title(LIST_NAME)
         
-        columnas_req = ["Id", "Title", "field_1", "field_9", "field_10", "field_5", "field_7", "field_8", "field_2", "field_3", "field_4", "field_14", "field_15", "field_13", "field_11", "field_12", "Antes", "Despues", "Estado"]
+        columnas_req = ["Id", "Title", "field_1", "field_9", "field_10", "field_5", "field_7", "field_8", "field_2", "field_3", "field_4", "field_14", "field_15", "field_13", "field_11", "field_12", "Antes", "Despues", "Estado", "CRITICIDAD"]
         
         items = sp_list.items.select(columnas_req).top(5000).get().execute_query()
 
@@ -1113,10 +1111,22 @@ def main():
                     status = "pendiente"
 
             prio_raw = normalizar_texto(limpiar(p.get("field_10")))
-            if "calavera" in prio_raw or "☠" in prio_raw or prio_raw == "0": prio = "0"
-            elif "alta" in prio_raw or prio_raw == "1": prio = "1"
-            elif "media" in prio_raw or prio_raw == "2": prio = "2"
-            else: prio = "3"
+            crit_raw = normalizar_texto(limpiar(p.get("CRITICIDAD")))
+
+            if prio_raw: 
+                if "calavera" in prio_raw or "☠" in prio_raw or prio_raw == "0" or "alta" in prio_raw or prio_raw == "1":
+                    prio = "1"
+                elif "media" in prio_raw or prio_raw == "2":
+                    prio = "2"
+                else:
+                    prio = "3"
+            else:
+                if "critica" in crit_raw:
+                    prio = "1"
+                elif "mayor" in crit_raw:
+                    prio = "2"
+                else:
+                    prio = "3"
 
             imgs_a = []
             im = procesar_foto_attachment(ctx, item_id, p.get("Antes"))
