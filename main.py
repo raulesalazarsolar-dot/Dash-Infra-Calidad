@@ -12,11 +12,9 @@ from zoneinfo import ZoneInfo
 # ==========================================
 # 1. CONFIGURACIÓN GOOGLE DRIVE
 # ==========================================
-# ID extraído del enlace proporcionado
 GDRIVE_FILE_ID = "16uSilZ3IKizJ0GjO4YeatrrswdoVfw_B"
 CSV_URL = f"https://drive.google.com/uc?export=download&id={GDRIVE_FILE_ID}"
 
-# Salida directa del dashboard
 OUTPUT_HTML = "index.html"
 
 # ==========================================
@@ -92,7 +90,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
 
     print(f"\n🔨 Construyendo archivo HTML...")
     
-    # AQUÍ ESTÁ EL CAMBIO PARA LA HORA CHILENA:
     fecha_actual = datetime.now(ZoneInfo("America/Santiago")).strftime("%d/%m/%Y %H:%M")
     
     download_btn = ""
@@ -132,6 +129,11 @@ def generar_html_moderno(db_json, titulo_dashboard):
         select:focus, input:focus {{ border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }}
         .btn-clean {{ background: white; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: 0.2s; margin-top: 10px; width: 100%; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; }}
         .btn-clean:hover {{ background: var(--danger); color: white; }}
+
+        /* NUEVO CSS PARA RANGO DE SEMANAS COMPACTO */
+        .range-box {{ display: flex; align-items: center; gap: 8px; justify-content: space-between; }}
+        .range-box select {{ width: 100%; padding: 6px 10px; font-size: 0.8rem; }}
+        .range-box span {{ font-size: 0.85rem; color: var(--muted); font-weight: bold; text-transform: lowercase; }}
 
         .kpi-row-mini {{ display: flex; justify-content: space-between; margin-bottom: 15px; }}
         .kpi-box {{ text-align: center; }} .k-label {{ display: block; font-size: 0.7rem; color: var(--muted); font-weight: 700; }}
@@ -324,7 +326,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
             <div class="chart-card wide"><div class="chart-title">Tendencia de Generación Mensual</div><div class="canvas-container"><canvas id="chart6"></canvas></div></div>
             <div class="chart-card"><div class="chart-title">Status General</div><div class="canvas-container"><canvas id="chart1"></canvas></div></div>
             <div class="chart-card"><div class="chart-title">Clasificación / Naturaleza</div><div class="canvas-container"><canvas id="chart2"></canvas></div></div>
-            <div class="chart-card wide"><div class="chart-title">Gestión por Responsable</div><div class="canvas-container"><canvas id="chart3"></canvas></div></div>
             <div class="chart-card wide"><div class="chart-title">Pareto: Frecuencia de Hallazgos por Ubicación</div><div class="canvas-container"><canvas id="chart4"></canvas></div></div>
             <div class="chart-card wide"><div class="chart-title">Jack Knife: Frecuencia Total vs Críticos por Ubicación</div><div class="canvas-container"><canvas id="chart5"></canvas></div></div>
         </div>
@@ -369,15 +370,17 @@ def generar_html_moderno(db_json, titulo_dashboard):
         }};
 
         let html = '';
-        html += `<div class="f-group"><label>Semana</label><div class="range-box"><select id="f_s1" onchange="applyFilters()"></select><span>a</span><select id="f_s2" onchange="applyFilters()"></select></div></div>`;
-        html += createSelect('f_mes', 'Mes Levantamiento', months);
-        html += createSelect('f_clase', 'Clase', [...new Set(records.map(x=>x.clase))].sort());
-        html += createSelect('f_exec', 'Ejecutor', [...new Set(records.map(x=>x.ejecutor))].sort());
-        html += createSelect('f_ubi', 'Ubicación / Área', [...new Set(records.map(x=>x.ubicacion))].sort());
-        html += `<div class="f-group"><label>Prioridad / Criticidad</label><select id="f_prio" onchange="applyFilters()"><option value="ALL">Todas</option><option value="1">🚨 Crítica</option><option value="2">🟡 Mayor</option><option value="3">🟢 Menor</option></select></div>`;
+        html += `<div class="f-group"><label>📅 Semana</label><div class="range-box"><select id="f_s1" onchange="applyFilters()"></select><span>a</span><select id="f_s2" onchange="applyFilters()"></select></div></div>`;
+        html += createSelect('f_mes', '🗓️ Mes Levantamiento', months);
+        html += createSelect('f_clase', '🏷️ Clase', [...new Set(records.map(x=>x.clase))].sort());
+        
+        /* FILTRO EJECUTOR ELIMINADO SEGÚN SOLICITUD */
+        
+        html += createSelect('f_ubi', '📍 Ubicación / Área', [...new Set(records.map(x=>x.ubicacion))].sort());
+        html += `<div class="f-group"><label>🚨 Prioridad / Criticidad</label><select id="f_prio" onchange="applyFilters()"><option value="ALL">Todas</option><option value="1">🚨 Crítica</option><option value="2">🟡 Mayor</option><option value="3">🟢 Menor</option></select></div>`;
         
         if (appState.view === 'charts') {{
-            html += `<div class="f-group"><label>Estado</label><select id="f_status" onchange="applyFilters()"><option value="ALL">Todos</option><option value="ok">✅ Realizadas / Cerradas</option><option value="pend">⚠️ Pendientes / En Proceso</option></select></div>`;
+            html += `<div class="f-group"><label>📋 Estado</label><select id="f_status" onchange="applyFilters()"><option value="ALL">Todos</option><option value="ok">✅ Realizadas / Cerradas</option><option value="pend">⚠️ Pendientes / En Proceso</option></select></div>`;
         }}
 
         html += `<button class="btn-clean" onclick="resetFilters()">🔄 Limpiar Filtros</button>`;
@@ -438,9 +441,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         const s1 = document.getElementById('f_s1') ? document.getElementById('f_s1').selectedIndex : 0;
         const s2 = document.getElementById('f_s2') ? document.getElementById('f_s2').selectedIndex : 999;
         
-        const eEl = document.getElementById('f_exec');
-        const eVal = eEl ? eEl.value : 'ALL';
-        
         const uEl = document.getElementById('f_ubi');
         const uVal = uEl ? uEl.value : 'ALL';
         
@@ -464,7 +464,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
                 if (stVal !== 'ALL') {{
                     const isOk = (d.status === 'realizada' || d.status === 'cerrada');
                     if (stVal === 'ok' && !isOk) return false;
-                    if (stVal === 'pendientes' && isOk) return false;
+                    if (stVal === 'pend' && isOk) return false;
                 }}
             }} else {{
                 if (appState.statusFilter !== 'all') {{
@@ -498,7 +498,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
             let miClase = d.clase || '';
             if (cVal !== 'ALL' && miClase !== cVal) return false;
             
-            if (eVal !== 'ALL' && d.ejecutor !== eVal) return false;
             if (uVal !== 'ALL' && d.ubicacion !== uVal) return false;
             if (pVal !== 'ALL' && d.prioridad !== pVal) return false;
             
@@ -737,12 +736,12 @@ def generar_html_moderno(db_json, titulo_dashboard):
     function drawCharts(data) {{
         if(!data || data.length === 0) return;
         
-        const chartIds = ['chart1', 'chart2', 'chart3', 'chart4', 'chart5', 'chart6'];
+        const chartIds = ['chart1', 'chart2', 'chart4', 'chart5', 'chart6'];
         chartIds.forEach(id => {{
             if (chartInstances[id]) {{ chartInstances[id].destroy(); chartInstances[id] = null; }}
         }});
 
-        let stats = {{ ok:0, pend:0, pre:0, prog:0, ex:{{}}, loc:{{}}, wCounts:{{}}, cCounts:{{}}, mCounts:{{}} }};
+        let stats = {{ ok:0, pend:0, pre:0, prog:0, loc:{{}}, wCounts:{{}}, cCounts:{{}}, mCounts:{{}} }};
         weeks.forEach(w => stats.wCounts[w] = {{total:0, ok:0, pre:0}});
         
         data.forEach(d => {{
@@ -754,10 +753,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
             
             let miClase = d.clase || 'General';
             stats.cCounts[miClase] = (stats.cCounts[miClase]||0)+1;
-
-            const e = d.ejecutor || 'Sin Asignar';
-            if(!stats.ex[e]) stats.ex[e]={{ok:0, pend:0}};
-            if(isOk) stats.ex[e].ok++; else stats.ex[e].pend++;
 
             const l = d.ubicacion || 'Sin Ubicación';
             if(!stats.loc[l]) stats.loc[l]={{total:0, critical:0}};
@@ -878,13 +873,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
             type: 'pie', 
             data: {{ labels:Object.keys(stats.cCounts), datasets:[{{ data:Object.values(stats.cCounts), backgroundColor:['#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#d946ef','#f59e0b'], borderWidth: 1, borderColor: '#fff' }}] }}, 
             options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, legend: {{ position: 'right' }} }}, onClick: (e, els, ch) => {{ if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => (d.clase || 'General') === ch.data.labels[els[0].index]); }} }}
-        }});
-        
-        const sortedEx = Object.entries(stats.ex).sort((a,b)=>(b[1].ok+b[1].pend)-(a[1].ok+a[1].pend)).slice(0,10);
-        chartInstances['chart3'] = new Chart(getFreshCanvas('chart3'), {{ 
-            type: 'bar', 
-            data: {{ labels: sortedEx.map(x=>x[0]), datasets: [ {{ label:'Pendientes', data:sortedEx.map(x=>x[1].pend), backgroundColor:'#fee2e2', borderColor:'#ef4444', borderWidth: 1, borderRadius: 4 }}, {{ label:'Cerradas', data:sortedEx.map(x=>x[1].ok), backgroundColor:'#dcfce7', borderColor:'#10b981', borderWidth: 1, borderRadius: 4 }} ]}}, 
-            options: {{ ...commonOpts, indexAxis: 'y', scales: {{ x: {{ stacked: true, grid: {{ display: false }} }}, y: {{ stacked: true, grid: {{ display: false }} }} }}, onClick: (e, els, ch) => {{ if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => d.ejecutor === ch.data.labels[els[0].index]); }} }}
         }});
 
         const sortedLocs = Object.entries(stats.loc).sort((a,b)=>b[1].total - a[1].total).slice(0, 20); 
@@ -1041,6 +1029,14 @@ def main():
         for idx, row in df.iterrows():
             print(f"      ... Procesando Actividad {idx+1} de {total_items}", end='\r')
             
+            clase_str = limpiar(row.get("Clase", "")).title() or "General"
+            
+            # --- NUEVO FILTRO DE CLASES ---
+            clase_norm = normalizar_texto(clase_str)
+            if not any(x in clase_norm for x in ["calidad", "sanitizacion", "infraestructura"]):
+                continue # Omitimos el registro si no cumple las clases indicadas
+            # ------------------------------
+
             # MAPEO EXACTO DE COLUMNAS DEL CSV
             item_id = str(row.get("ID", idx))
             tag_id = limpiar(row.get("Tag", ""))
@@ -1058,7 +1054,6 @@ def main():
             
             prio_raw = normalizar_texto(limpiar(row.get("Prioridad", "")))
             status_raw = normalizar_texto(limpiar(row.get("Status", "")))
-            clase_str = limpiar(row.get("Clase", "")).title() or "General"
             
             obs1 = limpiar(row.get("Observación", ""))
             obs2 = limpiar(row.get("Observación 2", ""))
