@@ -7,30 +7,22 @@ import unicodedata
 import pandas as pd
 from urllib.parse import urlparse, unquote
 from datetime import datetime
-from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.user_credential import UserCredential
 
 # ==========================================
-# 1. CONFIGURACIÓN GITHUB ACTIONS
+# 1. CONFIGURACIÓN GOOGLE DRIVE
 # ==========================================
-SITE_URL = "https://teams.wal-mart.com/sites/EquipoPlanificacin"
-LIST_NAME = "Seguimiento Infraestructura"
+# ID extraído del enlace proporcionado
+GDRIVE_FILE_ID = "16uSilZ3IKizJ0GjO4YeatrrswdoVfw_B"
+CSV_URL = f"https://drive.google.com/uc?export=download&id={GDRIVE_FILE_ID}"
 
-# Credenciales seguras desde GitHub Secrets
-USERNAME = os.environ.get("SP_USER")
-PASSWORD = os.environ.get("SP_PASS") 
-
-# Salida directa para GitHub Pages
+# Salida directa del dashboard
 OUTPUT_HTML = "index.html"
 
-CACHE_FOLDER = "fotos_infra_cache"
-if not os.path.exists(CACHE_FOLDER): os.makedirs(CACHE_FOLDER)
-
 # ==========================================
-# 2. UTILIDADES Y PROCESAMIENTO DE FOTOS
+# 2. UTILIDADES
 # ==========================================
 def limpiar(val):
-    if val is None: return ""
+    if pd.isna(val) or val is None: return ""
     s = str(val).strip()
     if s == "0" or s == "0.0": return "0"
     if s.lower() == "nan": return "" 
@@ -42,7 +34,7 @@ def normalizar_texto(texto):
     return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
 
 def formatear_fecha(texto_fecha):
-    if not texto_fecha: return "--"
+    if not texto_fecha or pd.isna(texto_fecha): return "--"
     try:
         s_fecha = str(texto_fecha)
         if "T" in s_fecha: return datetime.strptime(s_fecha.split("T")[0], "%Y-%m-%d").strftime("%d-%m-%Y")
@@ -50,42 +42,6 @@ def formatear_fecha(texto_fecha):
         if " " in s_fecha: return s_fecha.split(" ")[0]
         return s_fecha
     except: return str(texto_fecha)
-
-def extraer_dato_seguro(properties, key):
-    val = properties.get(key)
-    if val is None: return ""
-    if isinstance(val, dict): return str(val.get('Title') or val.get('Value') or val.get('Description') or "").strip()
-    if isinstance(val, list): return ", ".join([str(v.get('Title') or v.get('Value') or "") for v in val])
-    return limpiar(val)
-
-def procesar_foto_attachment(ctx, item_id, json_raw):
-    """Descarga la foto y la ajusta a 600x600 para no superar el límite de GitHub"""
-    if not json_raw: return None
-    try:
-        data = json.loads(json_raw) if isinstance(json_raw, str) else json_raw
-        filename = data.get("fileName")
-        if not filename: return None
-        rel_site = SITE_URL.replace("https://teams.wal-mart.com", "")
-        url = f"{rel_site}/Lists/{LIST_NAME}/Attachments/{item_id}/{filename}"
-        local = os.path.join(CACHE_FOLDER, f"ID_{item_id}_{filename.replace(' ', '_')}")
-        
-        if not os.path.exists(local) or os.path.getsize(local) == 0:
-            with open(local, "wb") as f:
-                ctx.web.get_file_by_server_relative_url(url).download(f).execute_query()
-        
-        if os.path.exists(local) and os.path.getsize(local) > 0:
-            from PIL import Image
-            with Image.open(local) as img:
-                if img.mode != "RGB": img = img.convert("RGB")
-                # Tamaño 600x600 para bajar el peso drásticamente
-                img.thumbnail((600, 600))
-                buf = io.BytesIO()
-                # Calidad 70 para asegurar que no roce los 100MB
-                img.save(buf, format='JPEG', quality=70, optimize=True)
-                encoded_string = base64.b64encode(buf.getvalue()).decode('utf-8')
-                return f"data:image/jpeg;base64,{encoded_string}"
-    except: return None
-    return None
 
 # ==========================================
 # 3. GENERAR EXCEL CALIDAD
@@ -1061,39 +1017,55 @@ def generar_html_moderno(db_json, titulo_dashboard):
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f: f.write(full_html)
     print(f"✅ REPORTE {titulo_dashboard} GUARDADO CON ÉXITO")
 
+
 # ==========================================
-# 5. MAIN EJECUCIÓN
+# 5. MAIN EJECUCIÓN (Lectura de CSV)
 # ==========================================
 def main():
     try:
-        print(f"🚀 INICIANDO EXTRACCIÓN DE SHAREPOINT...")
-        print(f"📡 Conectando a Lista Principal: {LIST_NAME}...")
+        print(f"🚀 INICIANDO EXTRACCIÓN DESDE GOOGLE DRIVE...")
         
-        ctx = ClientContext(SITE_URL).with_credentials(UserCredential(USERNAME, PASSWORD))
-        sp_list = ctx.web.lists.get_by_title(LIST_NAME)
+        # Leemos el archivo. 
+        df = pd.read_csv(CSV_URL)
         
-        columnas_req = ["Id", "Title", "field_1", "field_9", "field_10", "field_5", "field_7", "field_8", "field_2", "field_3", "field_4", "field_14", "field_15", "field_13", "field_11", "field_12", "Antes", "Despues", "Estado", "CRITICIDAD"]
+        # Limpiamos espacios en blanco al inicio y final de los nombres de las columnas
+        df.columns = df.columns.str.strip()
         
-        items = sp_list.items.select(columnas_req).top(5000).get().execute_query()
-
         db_act = {}
-        total_items = len(items)
-        print(f"   ✅ Descargados {total_items} registros de Actividades. Extrayendo imágenes originales...")
+        total_items = len(df)
+        print(f"   ✅ Descargados {total_items} registros del CSV. Procesando...")
         
-        for idx, item in enumerate(items):
+        for idx, row in df.iterrows():
             print(f"      ... Procesando Actividad {idx+1} de {total_items}", end='\r')
-            p = item.properties
-            item_id = int(p.get("Id", 0))
-            act_str = limpiar(p.get("field_4"))
-            tag_id = limpiar(p.get("Title"))
             
-            ejecutor = extraer_dato_seguro(p, "field_9")
-            status_txt = normalizar_texto(limpiar(p.get("field_11")))
-            estado_txt = normalizar_texto(limpiar(p.get("Estado")))
-            clase_str = extraer_dato_seguro(p, "field_12").title() or "General"
+            # MAPEO EXACTO DE COLUMNAS DEL CSV
+            item_id = str(row.get("ID", idx))
+            tag_id = limpiar(row.get("Tag", ""))
+            semana = limpiar(row.get("Semana", ""))
+            f_lev = formatear_fecha(row.get("Levantamiento", ""))
+            
+            # Tomamos "Fecha de cierre" primariamente, o "Cierre" como respaldo
+            f_cie = formatear_fecha(row.get("Fecha de cierre", row.get("Cierre", ""))) 
+            
+            act_str = limpiar(row.get("Actividad", ""))
+            ubicacion = limpiar(row.get("Ubicación", ""))
+            ot = limpiar(row.get("OT", ""))
+            solped = limpiar(row.get("Solped", ""))
+            ejecutor = limpiar(row.get("Ejecutor", row.get("Responsable", "")))
+            
+            prio_raw = normalizar_texto(limpiar(row.get("Prioridad", "")))
+            status_raw = normalizar_texto(limpiar(row.get("Status", "")))
+            clase_str = limpiar(row.get("Clase", "")).title() or "General"
+            
+            obs1 = limpiar(row.get("Observación", ""))
+            obs2 = limpiar(row.get("Observación 2", ""))
+            
+            estado_txt = normalizar_texto(limpiar(row.get("Estado", "")))
+            crit_raw = normalizar_texto(limpiar(row.get("CRITICIDAD", "")))
 
+            # Lógica de estados 
             has_asignacion = bool(ejecutor and ejecutor.strip() and ejecutor.lower() != "sin asignar" and ejecutor != "0")
-            has_ejecutado = any(k in status_txt for k in ['ok', 'listo', 'cerrad', 'realiza', 'complet'])
+            has_ejecutado = any(k in status_raw for k in ['ok', 'listo', 'cerrad', 'realiza', 'complet'])
             has_cierre = any(k in estado_txt for k in ['cerrad', 'ok', 'complet'])
             is_calidad = "calidad" in clase_str.lower()
 
@@ -1110,9 +1082,7 @@ def main():
                 else:
                     status = "pendiente"
 
-            prio_raw = normalizar_texto(limpiar(p.get("field_10")))
-            crit_raw = normalizar_texto(limpiar(p.get("CRITICIDAD")))
-
+            # Lógica de criticidad
             if prio_raw: 
                 if "calavera" in prio_raw or "☠" in prio_raw or prio_raw == "0" or "alta" in prio_raw or prio_raw == "1":
                     prio = "1"
@@ -1128,42 +1098,36 @@ def main():
                 else:
                     prio = "3"
 
-            imgs_a = []
-            im = procesar_foto_attachment(ctx, item_id, p.get("Antes"))
-            if im: imgs_a.append(im)
-            
-            imgs_d = []
-            im_d = procesar_foto_attachment(ctx, item_id, p.get("Despues"))
-            if im_d: imgs_d.append(im_d)
-
             key_id = f"MTTO_{item_id}"
             db_act[key_id] = {
-                "key_id": key_id, "id_real": item_id, 
+                "key_id": key_id, 
+                "id_real": item_id, 
                 "titulo": act_str or tag_id or f"Actividad #{item_id}", 
                 "tag": tag_id,
-                "semana": limpiar(p.get("field_1")) or "S/N", 
+                "semana": semana or "S/N", 
                 "ejecutor": ejecutor or "Sin Asignar",
                 "prioridad": prio, 
-                "ubicacion": limpiar(p.get("field_5")) or "Sin Ubicación",
-                "ot": limpiar(p.get("field_7")), 
-                "solped": limpiar(p.get("field_8")), 
-                "f_lev": formatear_fecha(p.get("field_2")), 
-                "f_cie": formatear_fecha(p.get("field_3")),
+                "ubicacion": ubicacion or "Sin Ubicación",
+                "ot": ot, 
+                "solped": solped, 
+                "f_lev": f_lev, 
+                "f_cie": f_cie,
                 "actividad": act_str, 
-                "observacion1": limpiar(p.get("field_14")), 
-                "observacion2": limpiar(p.get("field_15")), 
+                "observacion1": obs1, 
+                "observacion2": obs2, 
                 "status": status, 
                 "has_asignacion": has_asignacion,
                 "has_ejecutado": has_ejecutado,
                 "has_cierre": has_cierre,
                 "clase": clase_str, 
                 "origen": "act", 
-                "imgs_antes": imgs_a, 
-                "imgs_despues": imgs_d
+                "imgs_antes": [],    
+                "imgs_despues": []   
             }
-        print(f"\n   ✅ Total Actividades procesadas: {len(db_act)}")
+            
+        print(f"\n   ✅ Total Actividades mapeadas: {len(db_act)}")
         
-        generar_html_moderno(db_act, "Actividades Infraestructura")
+        generar_html_moderno(db_act, "Actividades Infraestructura CSV")
 
     except Exception as e: 
         print(f"\n❌ Error Fatal en script: {e}")
