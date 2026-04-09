@@ -33,14 +33,24 @@ def normalizar_texto(texto):
     return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
 
 def formatear_fecha(texto_fecha):
-    if not texto_fecha or pd.isna(texto_fecha): return "--"
+    if pd.isna(texto_fecha) or not texto_fecha or str(texto_fecha).strip() == "": 
+        return "--"
     try:
-        s_fecha = str(texto_fecha)
-        if "T" in s_fecha: return datetime.strptime(s_fecha.split("T")[0], "%Y-%m-%d").strftime("%d-%m-%Y")
-        if isinstance(texto_fecha, datetime): return texto_fecha.strftime("%d-%m-%Y")
-        if " " in s_fecha: return s_fecha.split(" ")[0]
-        return s_fecha
-    except: return str(texto_fecha)
+        # Quitamos horas si las hay y estandarizamos todo a guiones
+        s = str(texto_fecha).strip().split(" ")[0].split("T")[0]
+        s = s.replace("/", "-") 
+        
+        p = s.split("-")
+        if len(p) == 3:
+            # Si Excel lo mandó como YYYY-MM-DD
+            if len(p[0]) == 4: 
+                return f"{p[2].zfill(2)}-{p[1].zfill(2)}-{p[0]}"
+            # Si Excel lo mandó como DD-MM-YYYY
+            else: 
+                return f"{p[0].zfill(2)}-{p[1].zfill(2)}-{p[2]}"
+        return s
+    except: 
+        return str(texto_fecha)
 
 # ==========================================
 # 3. GENERAR EXCEL CALIDAD
@@ -56,14 +66,24 @@ def generar_excel_calidad_b64(db_json):
                 obs_full += f"\n{item.get('observacion2', '')}"
                 
             row = {
-                "PLANTA": "MASAS", "Fecha de inspección": item.get('f_lev', ''), "Codigo": "R-ISO05-07", "PLANTA2": 2,
-                "RESPONSABLES DE INSPECCIÓN (NOMBRES y ÁREAS)": resp_str, "ÁREA A INSPECCIONAR": item.get('ubicacion', ''),
-                "Zonas de foco": "", "CUMPLIMIENTO": item.get('status', ''),
+                "PLANTA": "MASAS",
+                "Fecha de inspección": item.get('f_lev', ''),
+                "Codigo": "R-ISO05-07",
+                "PLANTA2": 2,
+                "RESPONSABLES DE INSPECCIÓN (NOMBRES y ÁREAS)": resp_str,
+                "ÁREA A INSPECCIONAR": item.get('ubicacion', ''),
+                "Zonas de foco": "", 
+                "CUMPLIMIENTO": item.get('status', '').upper(),
                 "DESCRICIÓN DEL HALLAZGO": item.get('actividad', '') or item.get('titulo', ''),
                 "INDICAR SI CORRESPONDE A TEMAS DE: LIMPIEZA Y ORDEN / MANTENIMIENTO / INFRAESTRUCTURA / EQUIPOS": "", 
-                "CRITICIDAD (MENOR, MAYOR, CRITICA)": "", "RESPONSABLE DE CIERRE": "", "FECHA DE CIERRE": "", 
-                "SAP": "", "OT": item.get('ot', ''), "ESTADO (ABIERTO/EN PROCESO/CERRADO)": "", 
-                "Comentarios": obs_full, "TAG": item.get('tag', '') 
+                "CRITICIDAD (MENOR, MAYOR, CRITICA)": "",
+                "RESPONSABLE DE CIERRE": item.get('ejecutor', ''),  
+                "FECHA DE CIERRE": item.get('f_cie', ''),           
+                "SAP": "", 
+                "OT": item.get('ot', ''), 
+                "ESTADO (ABIERTO/EN PROCESO/CERRADO)": item.get('status', '').upper(),
+                "Comentarios": obs_full, 
+                "TAG": item.get('tag', '') 
             }
             data.append(row)
             
@@ -130,7 +150,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .btn-clean {{ background: white; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: 0.2s; margin-top: 10px; width: 100%; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; }}
         .btn-clean:hover {{ background: var(--danger); color: white; }}
 
-        /* NUEVO CSS PARA RANGO DE SEMANAS COMPACTO */
         .range-box {{ display: flex; align-items: center; gap: 8px; justify-content: space-between; }}
         .range-box select {{ width: 100%; padding: 6px 10px; font-size: 0.8rem; }}
         .range-box span {{ font-size: 0.85rem; color: var(--muted); font-weight: bold; text-transform: lowercase; }}
@@ -373,8 +392,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         html += `<div class="f-group"><label>📅 Semana</label><div class="range-box"><select id="f_s1" onchange="applyFilters()"></select><span>a</span><select id="f_s2" onchange="applyFilters()"></select></div></div>`;
         html += createSelect('f_mes', '🗓️ Mes Levantamiento', months);
         html += createSelect('f_clase', '🏷️ Clase', [...new Set(records.map(x=>x.clase))].sort());
-        
-        /* FILTRO EJECUTOR ELIMINADO SEGÚN SOLICITUD */
         
         html += createSelect('f_ubi', '📍 Ubicación / Área', [...new Set(records.map(x=>x.ubicacion))].sort());
         html += `<div class="f-group"><label>🚨 Prioridad / Criticidad</label><select id="f_prio" onchange="applyFilters()"><option value="ALL">Todas</option><option value="1">🚨 Crítica</option><option value="2">🟡 Mayor</option><option value="3">🟢 Menor</option></select></div>`;
@@ -1031,7 +1048,7 @@ def main():
             
             clase_str = limpiar(row.get("Clase", "")).title() or "General"
             
-            # --- NUEVO FILTRO DE CLASES ---
+            # --- FILTRO DE CLASES ---
             clase_norm = normalizar_texto(clase_str)
             if not any(x in clase_norm for x in ["calidad", "sanitizacion", "infraestructura"]):
                 continue # Omitimos el registro si no cumple las clases indicadas
