@@ -7,6 +7,7 @@ import unicodedata
 import pandas as pd
 from urllib.parse import urlparse, unquote
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # ==========================================
 # 1. CONFIGURACIÓN GOOGLE DRIVE
@@ -90,7 +91,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
         return None
 
     print(f"\n🔨 Construyendo archivo HTML...")
-    fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M")
+    
+    # AQUÍ ESTÁ EL CAMBIO PARA LA HORA CHILENA:
+    fecha_actual = datetime.now(ZoneInfo("America/Santiago")).strftime("%d/%m/%Y %H:%M")
     
     download_btn = ""
     b64_excel = generar_excel_calidad_b64(db_json)
