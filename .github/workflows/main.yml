@@ -22,12 +22,9 @@ jobs:
 
       - name: Instalar librerias necesarias
         run: |
-          pip install Office365-REST-Python-Client pandas openpyxl Pillow
+          pip install pandas openpyxl
 
       - name: Ejecutar el script
-        env:
-          SP_USER: ${{ secrets.SP_USER }}
-          SP_PASS: ${{ secrets.SP_PASS }}
         run: python main.py 
 
       - name: Publicar el HTML en GitHub Pages
