@@ -78,7 +78,7 @@ def generar_excel_calidad_b64(db_json):
                 "INDICAR SI CORRESPONDE A TEMAS DE: LIMPIEZA Y ORDEN / MANTENIMIENTO / INFRAESTRUCTURA / EQUIPOS": "", 
                 "CRITICIDAD (MENOR, MAYOR, CRITICA)": "",
                 "RESPONSABLE DE CIERRE": item.get('ejecutor', ''),  
-                "FECHA DE CIERRE": item.get('f_cie', ''),           
+                "FECHA DE CIERRE": item.get('f_cie', ''),            
                 "SAP": "", 
                 "OT": item.get('ot', ''), 
                 "ESTADO (ABIERTO/EN PROCESO/CERRADO)": item.get('status', '').upper(),
@@ -125,7 +125,8 @@ def generar_html_moderno(db_json, titulo_dashboard):
     <style>
         :root {{ --primary: #0f172a; --secondary: #334155; --accent: #2563eb; --bg: #f8fafc; --border: #e2e8f0; --text: #1e293b; --muted: #64748b; --success: #10b981; --warn: #f59e0b; --danger: #ef4444; --info: #3b82f6; }}
         * {{ box-sizing: border-box; outline: none; font-family: 'Segoe UI', system-ui, sans-serif; }}
-        body {{ background: var(--bg); color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }}
+        /* FONDO TRANSPARENTE PARA QUE SE VEAN LAS PARTÍCULAS */
+        body {{ background: transparent; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }}
         
         .top-bar {{ background: var(--primary); color: white; padding: 0 20px; height: 60px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
         .brand h2 {{ margin: 0; font-size: 1.2rem; display:flex; align-items:center; gap: 8px; }} 
@@ -216,7 +217,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .nav-prev {{ left: 5px; }} .nav-next {{ right: 5px; }}
         .img-counter {{ position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.6); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; z-index: 10; }}
 
-        .graficos-layout {{ flex: 1; padding: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px; overflow-y: auto; background: #f1f5f9; align-content:start; }}
+        .graficos-layout {{ flex: 1; padding: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px; overflow-y: auto; background: transparent; align-content:start; }}
         .chart-card {{ background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column; height: 400px; width: 100%; }}
         .chart-card.wide {{ grid-column: 1 / -1; height: 480px; }}
         .chart-title {{ font-size: 1rem; font-weight: 700; color: var(--secondary); margin-bottom: 15px; text-transform: uppercase; text-align: center; letter-spacing: 0.5px; }}
@@ -1014,9 +1015,115 @@ def generar_html_moderno(db_json, titulo_dashboard):
         }});
     }}
 
+    // --- EFECTO ANTIGRAVEDAD ESCAPADO PARA F-STRINGS PYTHON ---
+    const initAntigravity = () => {{
+        const canvas = document.createElement('canvas');
+        canvas.id = 'antigravity-bg';
+        document.body.prepend(canvas);
+        const ctx = canvas.getContext('2d');
+
+        canvas.style.position = 'fixed';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.width = '100vw';
+        canvas.style.height = '100vh';
+        canvas.style.zIndex = '-1'; 
+        canvas.style.pointerEvents = 'none';
+        canvas.style.backgroundColor = '#f8fafc'; // Fondo que reemplaza al body
+
+        let particles = [];
+        const colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#A0C3FF', '#FCA297'];
+        let mouse = {{ x: null, y: null, radius: 120 }};
+
+        window.addEventListener('mousemove', (e) => {{
+            mouse.x = e.x;
+            mouse.y = e.y;
+        }});
+
+        window.addEventListener('mouseout', () => {{
+            mouse.x = undefined;
+            mouse.y = undefined;
+        }});
+
+        window.addEventListener('resize', () => {{
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initParticles();
+        }});
+
+        class Particle {{
+            constructor(x, y) {{
+                this.x = x;
+                this.y = y;
+                this.baseX = x;
+                this.baseY = y;
+                this.size = Math.random() * 2 + 1.5;
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+                this.density = (Math.random() * 20) + 2;
+            }}
+            draw() {{
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+            }}
+            update() {{
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < mouse.radius) {{
+                    let forceDirectionX = dx / distance;
+                    let forceDirectionY = dy / distance;
+                    let force = (mouse.radius - distance) / mouse.radius;
+                    let directionX = forceDirectionX * force * this.density;
+                    let directionY = forceDirectionY * force * this.density;
+                    
+                    this.x -= directionX;
+                    this.y -= directionY;
+                }} else {{
+                    if (this.x !== this.baseX) {{
+                        let dx = this.x - this.baseX;
+                        this.x -= dx / 15;
+                    }}
+                    if (this.y !== this.baseY) {{
+                        let dy = this.y - this.baseY;
+                        this.y -= dy / 15;
+                    }}
+                }}
+                this.draw();
+            }}
+        }}
+
+        function initParticles() {{
+            particles = [];
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            let numberOfParticles = (canvas.width * canvas.height) / 7000;
+            for (let i = 0; i < numberOfParticles; i++) {{
+                let x = Math.random() * canvas.width;
+                let y = Math.random() * canvas.height;
+                particles.push(new Particle(x, y));
+            }}
+        }}
+
+        function animateParticles() {{
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = 0; i < particles.length; i++) {{
+                particles[i].update();
+            }}
+            requestAnimationFrame(animateParticles);
+        }}
+
+        initParticles();
+        animateParticles();
+    }};
+
     window.onload = () => {{
         buildFilters();
         applyFilters();
+        initAntigravity(); // <--- Inicia el efecto visual
     }};
     </script>
 </body></html>
