@@ -125,32 +125,45 @@ def generar_html_moderno(db_json, titulo_dashboard):
     <style>
         :root {{ --primary: #0f172a; --secondary: #334155; --accent: #2563eb; --bg: #f8fafc; --border: #e2e8f0; --text: #1e293b; --muted: #64748b; --success: #10b981; --warn: #f59e0b; --danger: #ef4444; --info: #3b82f6; }}
         * {{ box-sizing: border-box; outline: none; font-family: 'Segoe UI', system-ui, sans-serif; }}
-        /* Fondo transparente global para el canvas */
+        
+        /* Fondo transparente para que se vean las partículas detrás */
         body {{ background: transparent; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }}
         
         .top-bar {{ background: var(--primary); color: white; padding: 0 20px; height: 60px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
         .brand h2 {{ margin: 0; font-size: 1.2rem; display:flex; align-items:center; gap: 8px; }} 
         .brand span {{ opacity: 0.7; font-weight: 300; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; }}
         
-        /* Efecto vidrio esmerilado para la barra de pestañas */
-        .tabs-container {{ background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 0 20px; flex-shrink: 0; display:flex; justify-content: space-between; z-index: 5; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
+        .tabs-container {{ background: #fff; border-bottom: 1px solid var(--border); padding: 0 20px; flex-shrink: 0; display:flex; justify-content: space-between; z-index: 5; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
         .tabs-nav {{ display: flex; gap: 15px; }}
         .tab-btn {{ background: none; border: none; padding: 15px 5px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; font-size: 0.95rem; }}
         .tab-btn:hover {{ color: var(--accent); }} .tab-btn.active {{ color: var(--accent); border-bottom-color: var(--accent); }}
         
         .app-layout {{ display: flex; height: calc(100vh - 110px); width: 100%; overflow: hidden; }}
         
-        /* Fondos translúcidos para menús y listas */
-        .col-filters {{ width: 280px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; z-index: 5; }}
-        .filters-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 700; color: var(--primary); font-size: 0.9rem; text-transform: uppercase; background: transparent; }}
+        /* Listas y Filtros sólidos para fácil lectura */
+        .col-filters {{ width: 280px; background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; z-index: 5; }}
+        .filters-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 700; color: var(--primary); font-size: 0.9rem; text-transform: uppercase; background: #f8fafc; }}
         .filters-body {{ flex: 1; overflow-y: auto; padding: 20px; min-height: 0; }} 
-        .filters-footer {{ padding: 20px; border-top: 1px solid var(--border); background: transparent; flex-shrink: 0; }}
+        .filters-footer {{ padding: 20px; border-top: 1px solid var(--border); background: #f8fafc; flex-shrink: 0; }}
+        
+        .col-list {{ width: 380px; background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }}
+        .list-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 600; background: #f8fafc; color: var(--secondary); font-size: 0.9rem; flex-shrink: 0; display:flex; flex-direction:column; gap:12px; }}
+        .list-scroll-area {{ flex: 1; overflow-y: auto; min-height: 0; }}
+        
+        /* Contenedores transparentes para mostrar el canvas (efecto de partículas) */
+        .col-detail {{ flex: 1; background: transparent; overflow-y: auto; padding: 40px; }}
+        .graficos-layout {{ flex: 1; padding: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px; overflow-y: auto; background: transparent; align-content:start; }}
+        
+        /* Las tarjetas de contenido se mantienen blancas para legibilidad */
+        .detail-content {{ background: white; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); overflow: hidden; max-width: 1000px; margin: 0 auto; border: 1px solid var(--border); }}
+        .chart-card {{ background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column; height: 400px; width: 100%; }}
+        .chart-card.wide {{ grid-column: 1 / -1; height: 480px; }}
         
         .f-group {{ margin-bottom: 15px; }}
         .f-group label {{ font-size: 0.75rem; font-weight: 700; color: var(--muted); display: block; margin-bottom: 6px; text-transform: uppercase; }}
-        select, input {{ width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; color: var(--text); background: rgba(255,255,255,0.9); }}
+        select, input {{ width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; color: var(--text); }}
         select:focus, input:focus {{ border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }}
-        .btn-clean {{ background: rgba(255,255,255,0.9); border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: 0.2s; margin-top: 10px; width: 100%; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; }}
+        .btn-clean {{ background: white; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: 0.2s; margin-top: 10px; width: 100%; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; }}
         .btn-clean:hover {{ background: var(--danger); color: white; }}
 
         .range-box {{ display: flex; align-items: center; gap: 8px; justify-content: space-between; }}
@@ -161,16 +174,11 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .kpi-box {{ text-align: center; }} .k-label {{ display: block; font-size: 0.7rem; color: var(--muted); font-weight: 700; }}
         .k-num {{ display: block; font-size: 1.3rem; font-weight: 800; color: var(--primary); }} .k-ok {{ color: var(--success); }} .k-pend {{ color: var(--danger); }}
         .prog-title {{ display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }}
-        .progress-bar-container {{ width: 100%; height: 10px; background: rgba(226,232,240,0.5); border-radius: 5px; overflow: hidden; }}
+        .progress-bar-container {{ width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }}
         .progress-bar-fill {{ height: 100%; background: var(--success); width: 0%; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }}
         
-        /* Lista translúcida */
-        .col-list {{ width: 380px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }}
-        .list-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 600; background: transparent; color: var(--secondary); font-size: 0.9rem; flex-shrink: 0; display:flex; flex-direction:column; gap:12px; }}
-        .list-scroll-area {{ flex: 1; overflow-y: auto; min-height: 0; }}
-        
         .list-item {{ padding: 15px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: 0.2s; border-left: 4px solid transparent; }}
-        .list-item:hover {{ background: rgba(248, 250, 252, 0.5); }} .list-item.selected {{ background: rgba(239, 246, 255, 0.8); border-left-color: var(--accent); }}
+        .list-item:hover {{ background: #f8fafc; }} .list-item.selected {{ background: #eff6ff; border-left-color: var(--accent); }}
         .li-top {{ display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.75rem; color: var(--muted); font-weight: 600; }}
         .li-title {{ font-weight: 700; font-size: 0.95rem; color: var(--primary); margin-bottom: 10px; line-height: 1.4; }}
         .li-btm {{ display: flex; justify-content: space-between; font-size: 0.75rem; align-items: center; }}
@@ -178,11 +186,8 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .tag {{ padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.3px; }}
         .st-ok {{ background: #dcfce7; color: #166534; }} .st-pend {{ background: #fee2e2; color: #991b1b; }} .st-prog {{ background: #e0f2fe; color: #075985; }} .st-proc {{ background: #fef3c7; color: #92400e; }}
         
-        /* Panel de Detalle Glassmorphism */
-        .col-detail {{ flex: 1; background: rgba(241, 245, 249, 0.7); backdrop-filter: blur(8px); overflow-y: auto; padding: 40px; }}
         .empty-state {{ display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); opacity: 0.7; }}
-        .detail-content {{ background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(8px); border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); overflow: hidden; max-width: 1000px; margin: 0 auto; border: 1px solid var(--border); }}
-        .detail-header {{ padding: 30px; border-bottom: 1px solid var(--border); background: transparent; }}
+        .detail-header {{ padding: 30px; border-bottom: 1px solid var(--border); background: #fff; }}
         .dh-top {{ display: flex; justify-content: space-between; margin-bottom: 15px; align-items:center; }}
         .detail-header h2 {{ margin: 0 0 5px 0; font-size: 1.6rem; color: var(--primary); }}
         
@@ -201,16 +206,16 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .ticket-step-label {{ font-size: 0.75rem; font-weight: 700; color: var(--muted); transition: color 0.4s ease; text-transform: uppercase; }}
         .ticket-step.active .ticket-step-label, .ticket-step.current .ticket-step-label {{ color: var(--primary); }}
 
-        .data-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 25px; padding: 30px; background: transparent; border-bottom: 1px solid var(--border); }}
+        .data-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 25px; padding: 30px; background: #fff; border-bottom: 1px solid var(--border); }}
         .dg-item small {{ display: block; font-size: 0.7rem; color: var(--muted); font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }}
         .dg-item strong {{ font-size: 1rem; color: var(--text); }}
         
         .obs-box {{ padding: 30px; border-bottom: 1px solid var(--border); }}
         .obs-box h4 {{ margin: 0 0 12px; color: var(--secondary); font-size: 0.9rem; text-transform: uppercase; }}
-        .obs-box p {{ background: rgba(248, 250, 252, 0.6); padding: 20px; border-radius: 8px; border: 1px solid var(--border); margin: 0; line-height: 1.6; color: #334155; }}
+        .obs-box p {{ background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid var(--border); margin: 0; line-height: 1.6; color: #334155; }}
         
-        .gallery-section {{ padding: 30px; background: transparent; display:flex; flex-direction: column; gap: 20px; }}
-        .photo-card {{ flex: 1; text-align: center; border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: rgba(255, 255, 255, 0.8); box-shadow: 0 2px 4px rgba(0,0,0,0.02); }}
+        .gallery-section {{ padding: 30px; background: #f8fafc; display:flex; flex-direction: column; gap: 20px; }}
+        .photo-card {{ flex: 1; text-align: center; border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }}
         .pc-head {{ font-weight: 700; color: var(--secondary); margin-bottom: 10px; font-size: 0.85rem; text-transform: uppercase; }}
         .gal-img {{ max-width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px; cursor: zoom-in; transition: transform 0.2s; }}
         .gal-img:hover {{ transform: scale(1.02); }}
@@ -221,10 +226,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .nav-prev {{ left: 5px; }} .nav-next {{ right: 5px; }}
         .img-counter {{ position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.6); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; z-index: 10; }}
 
-        /* Gráficos Glassmorphism */
-        .graficos-layout {{ flex: 1; padding: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px; overflow-y: auto; background: rgba(241, 245, 249, 0.7); backdrop-filter: blur(8px); align-content:start; }}
-        .chart-card {{ background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px); padding: 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column; height: 400px; width: 100%; }}
-        .chart-card.wide {{ grid-column: 1 / -1; height: 480px; }}
         .chart-title {{ font-size: 1rem; font-weight: 700; color: var(--secondary); margin-bottom: 15px; text-transform: uppercase; text-align: center; letter-spacing: 0.5px; }}
         .canvas-container {{ position: relative; flex: 1 1 auto; width: 100%; min-height: 0; }}
         
@@ -294,7 +295,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
             <div class="col-list">
                 <div class="list-header" style="display: flex; flex-direction: column; gap: 10px;">
                     <div>📋 Registros</div>
-                    <input type="text" id="search_input" placeholder="🔍 Buscar TAG o Título..." onkeyup="applyFilters()" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.8rem; outline: none; transition: border-color 0.2s; background: rgba(255,255,255,0.9);">
+                    <input type="text" id="search_input" placeholder="🔍 Buscar TAG o Título..." onkeyup="applyFilters()" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.8rem; outline: none; transition: border-color 0.2s;">
                 </div>
                 <div id="list_container" class="list-scroll-area"></div>
             </div>
@@ -310,7 +311,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
                         <p style="color:var(--accent); font-weight: 600; font-size: 1.05rem; margin:0;" id="d_tag">TAG</p>
                     </div>
                     
-                    <div id="ticket_progress_wrapper" style="display:none; padding: 10px 40px; background: rgba(248, 250, 252, 0.5); border-bottom: 1px solid var(--border);">
+                    <div id="ticket_progress_wrapper" style="display:none; padding: 10px 40px; background: #f8fafc; border-bottom: 1px solid var(--border);">
                         <div class="ticket-step-container">
                             <div class="ticket-step-bg"></div>
                             <div id="ticket_step_fill" class="ticket-step-fill"></div>
@@ -1034,7 +1035,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         canvas.style.height = '100vh';
         canvas.style.zIndex = '-1'; 
         canvas.style.pointerEvents = 'none';
-        canvas.style.backgroundColor = '#f8fafc'; // Fondo base sobre el que flotan las partículas
+        canvas.style.backgroundColor = '#f8fafc'; // Fondo base de la app
 
         let particles = [];
         const colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#A0C3FF', '#FCA297'];
