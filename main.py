@@ -791,20 +791,24 @@ def generar_html_moderno(db_json, titulo_dashboard):
 
             let catMensual = null;
             let sortKey = null;
+            
+            // --- MODIFICACIÓN PARA SEPARAR 2024 y 2025 ---
             if (d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {{
                 let p = d.f_lev.split('-'); 
                 if (p.length >= 3) {{
                     let y = parseInt(p[2]);
                     let m = p[1];
                     if (y < 2026) {{
-                        catMensual = 'Arrastre 24/25';
-                        sortKey = '0000-00'; 
+                        catMensual = 'Arrastre ' + y;
+                        sortKey = y + '-00'; 
                     }} else {{
                         catMensual = m + '-' + y;
                         sortKey = y + '-' + m; 
                     }}
                 }}
             }}
+            // -----------------------------------------------
+            
             if (catMensual) {{
                 if (!stats.mCounts[catMensual]) {{
                     stats.mCounts[catMensual] = {{ total:0, ok:0, pre:0, sortKey: sortKey }};
