@@ -1,6 +1,8 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Dashboard - Actividades Infraestructura</title>
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Dashboard - Actividades Infraestructura SP</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root { --primary: #0f172a; --secondary: #334155; --accent: #2563eb; --bg: #f8fafc; --border: #e2e8f0; --text: #1e293b; --muted: #64748b; --success: #10b981; --warn: #f59e0b; --danger: #ef4444; --info: #3b82f6; }
         * { box-sizing: border-box; outline: none; font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -116,16 +118,31 @@
         
         .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); align-items: center; justify-content: center; backdrop-filter: blur(4px); }
         .modal img { max-width: 90%; max-height: 90vh; border-radius: 8px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        
+        #data_modal_content { background: white; width: 90%; max-width: 1200px; max-height: 85vh; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        .dm-header { padding: 20px 25px; background: var(--primary); color: white; display: flex; justify-content: space-between; align-items: center; }
+        .dm-header h3 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+        .dm-close { background: none; border: none; color: white; font-size: 1.8rem; cursor: pointer; opacity: 0.8; transition: 0.2s; line-height: 1; }
+        .dm-close:hover { opacity: 1; transform: scale(1.1); }
+        .dm-body { padding: 0; overflow-y: auto; flex: 1; background: var(--bg); }
+        .dm-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.9rem; text-align: left; }
+        .dm-table th { background: #f8fafc; padding: 15px 20px; font-weight: 700; color: var(--secondary); border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 10; text-transform: uppercase; font-size: 0.8rem; }
+        .dm-table td { padding: 15px 20px; border-bottom: 1px solid var(--border); color: var(--text); }
+        .dm-table tr { transition: background 0.2s; }
+        .dm-table tr:hover td { background: #eff6ff; cursor: pointer; }
     </style>
 </head>
 <body>
     <div id="modal" class="modal" onclick="if(event.target===this) this.style.display='none'"><img id="modalImg"></div>
+    <div id="data_modal" class="modal" onclick="if(event.target===this) this.style.display='none'">
+        <div id="data_modal_content"></div>
+    </div>
 
     <div class="top-bar">
-        <div class="brand"><h2>🏭 Seguimiento de actividades <span>Actividades Infraestructura</span></h2></div>
+        <div class="brand"><h2>🏭 Seguimiento de actividades <span>Actividades Infraestructura SP</span></h2></div>
         <div style="font-size:0.85rem; font-weight:600; opacity:0.9; display:flex; gap:15px; align-items:center;">
             
-            <span>Actualizado: 16/04/2026 10:54</span>
+            <span>Actualizado: 16/04/2026 11:29</span>
         </div>
     </div>
     
@@ -575,6 +592,52 @@
         document.getElementById('modal').style.display = 'flex';
     }
 
+    function showDataModal(title, filterFn) {
+        let html = `<div class="dm-header">
+            <h3>📊 Desglose: ${title}</h3>
+            <button class="dm-close" onclick="document.getElementById('data_modal').style.display='none'">&times;</button>
+        </div>
+        <div class="dm-body">
+            <table class="dm-table">
+                <thead><tr><th>ID / TAG</th><th>Semana</th><th>Título / Actividad</th><th>Responsable</th><th>Estado</th><th>Prioridad</th></tr></thead>
+                <tbody>`;
+
+        let found = false;
+        currentChartData.forEach(d => {
+            if (filterFn(d)) {
+                found = true;
+                let stColor = (d.status==='realizada' || d.status==='cerrada') ? '#166534' : (d.status==='pendiente' || d.status==='abierta' ? '#991b1b' : '#92400e');
+                let idDisplay = d.ot ? d.ot : (d.tag ? d.tag : '#' + d.id_real);
+                
+                let pText = 'MENOR'; let pColor = '#64748b';
+                if(d.prioridad==='1') { pText='🚨 CRÍTICA'; pColor='#dc2626'; }
+                else if(d.prioridad==='2') { pText='🟡 MAYOR'; pColor='#d97706'; }
+
+                html += `<tr onclick="document.getElementById('data_modal').style.display='none'; document.getElementById('btn_tab_list').click(); setTimeout(() => renderDetail('${d.key_id}'), 100);">
+                    <td style="font-weight:700;">${idDisplay}</td>
+                    <td>${d.semana}</td>
+                    <td>${d.titulo}</td>
+                    <td>${d.ejecutor.split(' ')[0]}</td>
+                    <td style="color:${stColor}; font-weight:700; text-transform:uppercase;">${d.status}</td>
+                    <td style="color:${pColor}; font-weight:700;">${pText}</td>
+                </tr>`;
+            }
+        });
+
+        if (!found) html += `<tr><td colspan="6" style="text-align:center; padding: 30px; color:var(--muted);">No hay registros para esta selección</td></tr>`;
+        html += `</tbody></table></div>`;
+        document.getElementById('data_modal_content').innerHTML = html;
+        document.getElementById('data_modal').style.display = 'flex';
+    }
+
+    function getFreshCanvas(id) {
+        const old = document.getElementById(id);
+        if(!old) return null;
+        const container = old.parentElement;
+        container.innerHTML = `<canvas id="${id}"></canvas>`;
+        return document.getElementById(id);
+    }
+
     function drawCharts(data) {
         if(!data || data.length === 0) return;
         
@@ -610,7 +673,7 @@
             let catMensual = null;
             let sortKey = null;
             
-            // --- MODIFICACIÓN PARA SEPARAR 2024 y 2025 ---
+            // --- MODIFICACIÓN PARA SEPARAR AÑOS ---
             if (d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {
                 let p = d.f_lev.split('-'); 
                 if (p.length >= 3) {
@@ -625,7 +688,6 @@
                     }
                 }
             }
-            // -----------------------------------------------
             
             if (catMensual) {
                 if (!stats.mCounts[catMensual]) {
@@ -700,14 +762,25 @@
             }, 
             options: { 
                 ...commonOpts, cutout: '70%', 
-                plugins: { ...commonOpts.plugins, legend: { position: 'bottom' } }
+                plugins: { ...commonOpts.plugins, legend: { position: 'bottom' } }, 
+                onClick: (e, els, ch) => { 
+                    if(els.length>0) {
+                        showDataModal(ch.data.labels[els[0].index], d => { 
+                            let st = ch.data.labels[els[0].index]; 
+                            if(st==='Cerradas') return d.status==='realizada' || d.status==='cerrada'; 
+                            if(st==='Precierre') return d.status==='precierre';
+                            if(st==='Pendientes') return d.status==='pendiente' || d.status==='abierta'; 
+                            return d.status==='programado' || d.status==='tratando'; 
+                        }); 
+                    }
+                } 
             }
         });
         
         chartInstances['chart2'] = new Chart(getFreshCanvas('chart2'), { 
             type: 'pie', 
             data: { labels:Object.keys(stats.cCounts), datasets:[{ data:Object.values(stats.cCounts), backgroundColor:['#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#d946ef','#f59e0b'], borderWidth: 1, borderColor: '#fff' }] }, 
-            options: { ...commonOpts, plugins: { ...commonOpts.plugins, legend: { position: 'right' } } }
+            options: { ...commonOpts, plugins: { ...commonOpts.plugins, legend: { position: 'right' } }, onClick: (e, els, ch) => { if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => (d.clase || 'General') === ch.data.labels[els[0].index]); } }
         });
 
         const sortedLocs = Object.entries(stats.loc).sort((a,b)=>b[1].total - a[1].total).slice(0, 20); 
@@ -757,6 +830,16 @@
                                 else { label += context.parsed.y; }
                                 return label;
                             }
+                        }
+                    }
+                },
+                onClick: (e, els, ch) => {
+                    if(els.length>0) {
+                        const chartElement = els.find(el => el.datasetIndex === 1);
+                        if(chartElement) {
+                            const index = chartElement.index;
+                            const label = ch.data.labels[index];
+                            showDataModal('Ubicación: ' + label, d => d.ubicacion === label);
                         }
                     }
                 }
@@ -810,6 +893,13 @@
                     
                     ctx.stroke();
                     ctx.restore();
+                }
+            },
+            onClick: (e, els, ch) => {
+                if(els.length>0) {
+                    const index = els[0].index;
+                    const dataPoint = ch.data.datasets[0].data[index];
+                    showDataModal('Ubicación: ' + dataPoint.label, d => d.ubicacion === dataPoint.label);
                 }
             }
         });
