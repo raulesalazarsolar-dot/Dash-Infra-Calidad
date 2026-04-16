@@ -19,10 +19,12 @@ from office365.runtime.auth.user_credential import UserCredential
 SITE_URL = "https://teams.wal-mart.com/sites/EquipoPlanificacin"
 LIST_NAME = "Seguimiento Infraestructura"
 
-# ⚠️ SEGURIDAD GITHUB: Lee la clave desde "GitHub Secrets".
+# ⚠️ SEGURIDAD GITHUB: Lee la clave desde "GitHub Secrets". 
+# Si no la encuentra (en local), usa la por defecto.
 USERNAME = os.environ.get("SP_USERNAME")
 PASSWORD = os.environ.get("SP_PASSWORD")
 
+# Archivo de salida para GitHub Pages
 OUTPUT_HTML = "index.html"
 
 # ==========================================
@@ -44,13 +46,12 @@ def formatear_fecha(texto_fecha):
     if pd.isna(texto_fecha) or not texto_fecha or str(texto_fecha).strip() == "": 
         return "--"
     try:
-        # Si viene en formato ISO (ej. 2026-03-15T00:00:00)
-        s = str(texto_fecha).strip().split(" ")[0].split("T")[0]
+        # SharePoint envía fechas como "YYYY-MM-DDTHH:MM:SSZ", limpiamos la 'T'
+        s = str(texto_fecha).strip().split("T")[0].split(" ")[0]
         s = s.replace("/", "-") 
         
         p = s.split("-")
         if len(p) == 3:
-            # Estandarizamos a DD-MM-YYYY
             if len(p[0]) == 4: 
                 return f"{p[2].zfill(2)}-{p[1].zfill(2)}-{p[0]}"
             else: 
@@ -80,26 +81,20 @@ def descargar_foto_por_url(ctx, url):
     return None
 
 def extraer_fotos_columna(ctx, p, col_name, item_id):
-    """Extrae múltiples imágenes de una columna y devuelve una lista de Base64"""
+    """Extrae múltiples imágenes de una columna y devuelve una LISTA de Base64"""
     imgs_b64 = []
     json_raw = p.get(col_name)
-    
     if json_raw:
         try:
-            # Puede ser un string JSON o ya un diccionario/lista
             data = json.loads(json_raw) if isinstance(json_raw, str) else json_raw
-            
-            # Si es una sola imagen (dict)
             if isinstance(data, dict):
-                data = [data] # Lo convertimos en lista para iterar
-                
-            # Si son múltiples imágenes (list)
+                data = [data] # Convertimos a lista si es solo una foto
+            
             if isinstance(data, list):
                 for img_data in data:
                     if isinstance(img_data, dict):
                         url = img_data.get("serverRelativeUrl") or img_data.get("serverUrl") or img_data.get("Url")
                         filename = img_data.get("fileName")
-                        
                         b64 = None
                         if url: 
                             b64 = descargar_foto_por_url(ctx, url)
@@ -110,8 +105,7 @@ def extraer_fotos_columna(ctx, p, col_name, item_id):
                         
                         if b64:
                             imgs_b64.append(b64)
-        except Exception as e: 
-            pass
+        except: pass
     return imgs_b64
 
 # ==========================================
@@ -192,13 +186,13 @@ def main():
         
         db_act = {}
         for idx, item in enumerate(items):
-            print(f"      ... Procesando Actividad {idx+1} de {total_main}", end='\r')
+            print(f"      ... Procesando OT {idx+1} de {total_main}", end='\r')
             p = item.properties
             item_id = int(p.get("Id", 0))
             
             clase_str = limpiar(p.get("ClaseM")).title() or "General"
             
-            # --- FILTRO DE CLASES ---
+            # --- FILTRO DE CLASES (Se mantiene de tu CSV) ---
             clase_norm = normalizar_texto(clase_str)
             if not any(x in clase_norm for x in ["calidad", "sanitizacion", "infraestructura"]):
                 continue 
@@ -211,12 +205,12 @@ def main():
             act_str = limpiar(p.get("field_4"))
             ubicacion = limpiar(p.get("field_5"))
             ot = limpiar(p.get("field_7"))
-            solped = "" # No mapeado en SP en tu script original
+            solped = "" 
             ejecutor = limpiar(p.get("Responsable"))
             
             prio_raw = normalizar_texto(limpiar(p.get("field_10")))
             status_raw = normalizar_texto(limpiar(p.get("field_11")))
-            estado_txt = normalizar_texto(limpiar(p.get("field_11"))) # Asumimos que status_raw y estado son el mismo campo en SP
+            estado_txt = normalizar_texto(limpiar(p.get("field_11")))
             
             obs1 = limpiar(p.get("field_14"))
             obs2 = limpiar(p.get("field_15"))
@@ -243,16 +237,16 @@ def main():
 
             # Lógica de criticidad
             if prio_raw: 
-                if "calavera" in prio_raw or "☠" in prio_raw or prio_raw == "0" or "alta" in prio_raw or "1" in prio_raw:
+                if "calavera" in prio_raw or "☠" in prio_raw or prio_raw == "0" or "alta" in prio_raw or prio_raw == "1":
                     prio = "1"
-                elif "media" in prio_raw or "2" in prio_raw:
+                elif "media" in prio_raw or prio_raw == "2":
                     prio = "2"
                 else:
                     prio = "3"
             else:
                 prio = "3"
 
-            # Extracción de fotos (lista de base64)
+            # 📸 Usando la nueva función que devuelve ARRAYS de fotos
             imgs_antes = extraer_fotos_columna(ctx, p, "Antes", item_id)
             imgs_despues = extraer_fotos_columna(ctx, p, "Despues", item_id)
 
@@ -284,16 +278,16 @@ def main():
             }
             
         print(f"\n   ✅ Total Actividades mapeadas: {len(db_act)}")
-        
-        generar_html_moderno(db_act, "Actividades Infraestructura")
+        generar_html_moderno(db_act, "Actividades Infraestructura SP")
 
     except Exception as e: 
         print(f"\n❌ Error Fatal en script: {e}")
         import traceback
         traceback.print_exc()
 
+
 # ==========================================
-# 5. GENERADOR HTML 
+# 5. GENERADOR HTML
 # ==========================================
 def generar_html_moderno(db_json, titulo_dashboard):
     if not db_json:
@@ -309,11 +303,14 @@ def generar_html_moderno(db_json, titulo_dashboard):
     if b64_excel:
         download_btn = f'<div id="btn_dl_container"><a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_excel}" download="Base_Calidad.xlsx" class="seg-btn" style="text-decoration:none; display:flex; align-items:center; background:#dcfce7; color:#166534; border:1px solid #166534; border-radius:4px; padding:4px 12px; font-weight:bold; font-size:0.85rem;">📥 Descargar Calidad</a></div>'
 
+    # Pasamos el JSON seguro
     json_seguro = json.dumps(db_json).replace("</", "<\\/")
 
     full_html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Dashboard - {titulo_dashboard}</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {{ --primary: #0f172a; --secondary: #334155; --accent: #2563eb; --bg: #f8fafc; --border: #e2e8f0; --text: #1e293b; --muted: #64748b; --success: #10b981; --warn: #f59e0b; --danger: #ef4444; --info: #3b82f6; }}
         * {{ box-sizing: border-box; outline: none; font-family: 'Segoe UI', system-ui, sans-serif; }}
@@ -429,10 +426,25 @@ def generar_html_moderno(db_json, titulo_dashboard):
         
         .modal {{ display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); align-items: center; justify-content: center; backdrop-filter: blur(4px); }}
         .modal img {{ max-width: 90%; max-height: 90vh; border-radius: 8px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }}
+        
+        #data_modal_content {{ background: white; width: 90%; max-width: 1200px; max-height: 85vh; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }}
+        .dm-header {{ padding: 20px 25px; background: var(--primary); color: white; display: flex; justify-content: space-between; align-items: center; }}
+        .dm-header h3 {{ margin: 0; font-size: 1.2rem; font-weight: 600; }}
+        .dm-close {{ background: none; border: none; color: white; font-size: 1.8rem; cursor: pointer; opacity: 0.8; transition: 0.2s; line-height: 1; }}
+        .dm-close:hover {{ opacity: 1; transform: scale(1.1); }}
+        .dm-body {{ padding: 0; overflow-y: auto; flex: 1; background: var(--bg); }}
+        .dm-table {{ width: 100%; border-collapse: collapse; background: white; font-size: 0.9rem; text-align: left; }}
+        .dm-table th {{ background: #f8fafc; padding: 15px 20px; font-weight: 700; color: var(--secondary); border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 10; text-transform: uppercase; font-size: 0.8rem; }}
+        .dm-table td {{ padding: 15px 20px; border-bottom: 1px solid var(--border); color: var(--text); }}
+        .dm-table tr {{ transition: background 0.2s; }}
+        .dm-table tr:hover td {{ background: #eff6ff; cursor: pointer; }}
     </style>
 </head>
 <body>
     <div id="modal" class="modal" onclick="if(event.target===this) this.style.display='none'"><img id="modalImg"></div>
+    <div id="data_modal" class="modal" onclick="if(event.target===this) this.style.display='none'">
+        <div id="data_modal_content"></div>
+    </div>
 
     <div class="top-bar">
         <div class="brand"><h2>🏭 Seguimiento de actividades <span>{titulo_dashboard}</span></h2></div>
@@ -888,6 +900,52 @@ def generar_html_moderno(db_json, titulo_dashboard):
         document.getElementById('modal').style.display = 'flex';
     }}
 
+    function showDataModal(title, filterFn) {{
+        let html = `<div class="dm-header">
+            <h3>📊 Desglose: ${{title}}</h3>
+            <button class="dm-close" onclick="document.getElementById('data_modal').style.display='none'">&times;</button>
+        </div>
+        <div class="dm-body">
+            <table class="dm-table">
+                <thead><tr><th>ID / TAG</th><th>Semana</th><th>Título / Actividad</th><th>Responsable</th><th>Estado</th><th>Prioridad</th></tr></thead>
+                <tbody>`;
+
+        let found = false;
+        currentChartData.forEach(d => {{
+            if (filterFn(d)) {{
+                found = true;
+                let stColor = (d.status==='realizada' || d.status==='cerrada') ? '#166534' : (d.status==='pendiente' || d.status==='abierta' ? '#991b1b' : '#92400e');
+                let idDisplay = d.ot ? d.ot : (d.tag ? d.tag : '#' + d.id_real);
+                
+                let pText = 'MENOR'; let pColor = '#64748b';
+                if(d.prioridad==='1') {{ pText='🚨 CRÍTICA'; pColor='#dc2626'; }}
+                else if(d.prioridad==='2') {{ pText='🟡 MAYOR'; pColor='#d97706'; }}
+
+                html += `<tr onclick="document.getElementById('data_modal').style.display='none'; document.getElementById('btn_tab_list').click(); setTimeout(() => renderDetail('${{d.key_id}}'), 100);">
+                    <td style="font-weight:700;">${{idDisplay}}</td>
+                    <td>${{d.semana}}</td>
+                    <td>${{d.titulo}}</td>
+                    <td>${{d.ejecutor.split(' ')[0]}}</td>
+                    <td style="color:${{stColor}}; font-weight:700; text-transform:uppercase;">${{d.status}}</td>
+                    <td style="color:${{pColor}}; font-weight:700;">${{pText}}</td>
+                </tr>`;
+            }}
+        }});
+
+        if (!found) html += `<tr><td colspan="6" style="text-align:center; padding: 30px; color:var(--muted);">No hay registros para esta selección</td></tr>`;
+        html += `</tbody></table></div>`;
+        document.getElementById('data_modal_content').innerHTML = html;
+        document.getElementById('data_modal').style.display = 'flex';
+    }}
+
+    function getFreshCanvas(id) {{
+        const old = document.getElementById(id);
+        if(!old) return null;
+        const container = old.parentElement;
+        container.innerHTML = `<canvas id="${{id}}"></canvas>`;
+        return document.getElementById(id);
+    }}
+
     function drawCharts(data) {{
         if(!data || data.length === 0) return;
         
@@ -923,7 +981,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
             let catMensual = null;
             let sortKey = null;
             
-            // --- MODIFICACIÓN PARA SEPARAR 2024 y 2025 ---
+            // --- MODIFICACIÓN PARA SEPARAR AÑOS ---
             if (d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {{
                 let p = d.f_lev.split('-'); 
                 if (p.length >= 3) {{
@@ -938,7 +996,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
                     }}
                 }}
             }}
-            // -----------------------------------------------
             
             if (catMensual) {{
                 if (!stats.mCounts[catMensual]) {{
@@ -1013,14 +1070,25 @@ def generar_html_moderno(db_json, titulo_dashboard):
             }}, 
             options: {{ 
                 ...commonOpts, cutout: '70%', 
-                plugins: {{ ...commonOpts.plugins, legend: {{ position: 'bottom' }} }}
+                plugins: {{ ...commonOpts.plugins, legend: {{ position: 'bottom' }} }}, 
+                onClick: (e, els, ch) => {{ 
+                    if(els.length>0) {{
+                        showDataModal(ch.data.labels[els[0].index], d => {{ 
+                            let st = ch.data.labels[els[0].index]; 
+                            if(st==='Cerradas') return d.status==='realizada' || d.status==='cerrada'; 
+                            if(st==='Precierre') return d.status==='precierre';
+                            if(st==='Pendientes') return d.status==='pendiente' || d.status==='abierta'; 
+                            return d.status==='programado' || d.status==='tratando'; 
+                        }}); 
+                    }}
+                }} 
             }}
         }});
         
         chartInstances['chart2'] = new Chart(getFreshCanvas('chart2'), {{ 
             type: 'pie', 
             data: {{ labels:Object.keys(stats.cCounts), datasets:[{{ data:Object.values(stats.cCounts), backgroundColor:['#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#d946ef','#f59e0b'], borderWidth: 1, borderColor: '#fff' }}] }}, 
-            options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, legend: {{ position: 'right' }} }} }}
+            options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, legend: {{ position: 'right' }} }}, onClick: (e, els, ch) => {{ if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => (d.clase || 'General') === ch.data.labels[els[0].index]); }} }}
         }});
 
         const sortedLocs = Object.entries(stats.loc).sort((a,b)=>b[1].total - a[1].total).slice(0, 20); 
@@ -1070,6 +1138,16 @@ def generar_html_moderno(db_json, titulo_dashboard):
                                 else {{ label += context.parsed.y; }}
                                 return label;
                             }}
+                        }}
+                    }}
+                }},
+                onClick: (e, els, ch) => {{
+                    if(els.length>0) {{
+                        const chartElement = els.find(el => el.datasetIndex === 1);
+                        if(chartElement) {{
+                            const index = chartElement.index;
+                            const label = ch.data.labels[index];
+                            showDataModal('Ubicación: ' + label, d => d.ubicacion === label);
                         }}
                     }}
                 }}
@@ -1123,6 +1201,13 @@ def generar_html_moderno(db_json, titulo_dashboard):
                     
                     ctx.stroke();
                     ctx.restore();
+                }}
+            }},
+            onClick: (e, els, ch) => {{
+                if(els.length>0) {{
+                    const index = els[0].index;
+                    const dataPoint = ch.data.datasets[0].data[index];
+                    showDataModal('Ubicación: ' + dataPoint.label, d => d.ubicacion === dataPoint.label);
                 }}
             }}
         }});
