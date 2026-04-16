@@ -565,14 +565,20 @@ def generar_html_moderno(db_json, titulo_dashboard):
     const records = Object.values(db).sort((a,b) => b.id_real - a.id_real);
     const weeks = [...new Set(records.map(x=>x.semana).filter(x=>x!=="S/N"))].sort((a,b)=>{{ let na=parseInt(a), nb=parseInt(b); return (isNaN(na)||isNaN(nb)) ? a.localeCompare(b) : na-nb; }});
     
-    const months = [...new Set(records.map(x => {{
+    // NOMBRES MESES - FORMATO VISUAL
+    const nombresMeses = {{ '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre' }};
+    
+    const rawMonths = [...new Set(records.map(x => {{
         if (x.f_lev && x.f_lev !== '--' && x.f_lev.includes('-')) {{
             let p = x.f_lev.split('-');
-            if(p.length >= 3) return p[1] + '-' + p[2];
+            if(p.length >= 3 && p[2] === '2026') {{
+                return p[1]; 
+            }}
         }}
-        return 'Sin Fecha';
-    }}))].filter(x => x !== 'Sin Fecha').sort();
-    months.push('Sin Fecha');
+        return null;
+    }}))].filter(x => x !== null).sort(); 
+    
+    const months = rawMonths.map(m => nombresMeses[m] + ' 2026');
     
     let appState = {{ statusFilter: 'all', view: 'list' }};
     let currentChartData = [];
@@ -708,10 +714,13 @@ def generar_html_moderno(db_json, titulo_dashboard):
             if (wIdx !== -1 && (wIdx < s1 || wIdx > s2)) return false;
             
             if (mVal !== 'ALL') {{
-                let dMes = 'Sin Fecha';
+                let dMes = null;
                 if(d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {{
                     let p = d.f_lev.split('-');
-                    if(p.length >= 3) dMes = p[1] + '-' + p[2];
+                    if (p.length >= 3 && p[2] === '2026') {{
+                        const nombresMeses = {{ '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre' }};
+                        dMes = nombresMeses[p[1]] + ' 2026';
+                    }}
                 }}
                 if (dMes !== mVal) return false;
             }}
