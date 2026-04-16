@@ -168,19 +168,20 @@ def main():
         
         print("   ⏳ Solicitando registros y adjuntos...")
         
-        # Mapeo actualizado de las columnas según tu tabla:
+        # Mapeo actualizado: Se reemplazó ClaseM por field_12
         columnas_req = [
             "ID", "Title", "LinkTitle", "field_1", "field_2", "field_3", 
             "field_4", "field_5", "field_6", "field_7", "field_8", 
-            "field_9", "field_10", "field_11", "field_14", "field_15", 
-            "Antes", "Despues", "Estado", "ClaseM", "Attachments", "AttachmentFiles"
+            "field_9", "field_10", "field_11", "field_12", "field_14", "field_15", 
+            "Antes", "Despues", "Estado", "Attachments", "AttachmentFiles"
         ]
         
         try:
-            items = sp_list.items.select(columnas_req).expand(["AttachmentFiles"]).top(5000).get().execute_query()
+            # Uso de get_all() en lugar de top() para evitar el límite de 5000 y traer todo el histórico
+            items = sp_list.items.select(columnas_req).expand(["AttachmentFiles"]).get_all().execute_query()
         except Exception:
             columnas_req.remove("AttachmentFiles")
-            items = sp_list.items.select(columnas_req).top(5000).get().execute_query()
+            items = sp_list.items.select(columnas_req).get_all().execute_query()
             
         total_main = len(items)
         print(f"   ✅ Se descargaron {total_main} registros brutos.")
@@ -191,8 +192,8 @@ def main():
             p = item.properties
             item_id = int(p.get("ID", 0))
             
-            # --- MAPEO EXACTO A NOMBRES INTERNOS ---
-            clase_str = limpiar(p.get("ClaseM")).title() or "General"
+            # --- MAPEO EXACTO A NOMBRES INTERNOS (Ahora leyendo field_12) ---
+            clase_str = limpiar(p.get("field_12")).title() or "General"
             
             # --- FILTRO DE CLASES ---
             clase_norm = normalizar_texto(clase_str)
@@ -201,7 +202,8 @@ def main():
             # -----------------------------------
 
             tag_id = limpiar(p.get("LinkTitle"))
-            semana = limpiar(p.get("field_1"))
+            # Fallback por si en semanas antiguas field_1 venía vacío
+            semana = limpiar(p.get("field_1")) or "S/N"
             f_lev = formatear_fecha(p.get("field_2"))
             f_cie = formatear_fecha(p.get("field_3"))
             
@@ -213,7 +215,7 @@ def main():
             
             prio_raw = normalizar_texto(limpiar(p.get("field_10")))
             status_raw = normalizar_texto(limpiar(p.get("field_11")))
-            estado_txt = normalizar_texto(limpiar(p.get("Estado"))) # Mapeando la columna "Estado"
+            estado_txt = normalizar_texto(limpiar(p.get("Estado"))) 
             
             obs1 = limpiar(p.get("field_14"))
             obs2 = limpiar(p.get("field_15"))
@@ -258,7 +260,7 @@ def main():
                 "id_real": item_id, 
                 "titulo": act_str or tag_id or f"Actividad #{item_id}", 
                 "tag": tag_id,
-                "semana": semana or "S/N", 
+                "semana": semana, 
                 "ejecutor": ejecutor or "Sin Asignar",
                 "prioridad": prio, 
                 "ubicacion": ubicacion or "Sin Ubicación",
@@ -275,7 +277,7 @@ def main():
                 "has_cierre": has_cierre,
                 "clase": clase_str, 
                 "origen": "act", 
-                "imgs_antes": imgs_antes,    
+                "imgs_antes": imgs_antes,   
                 "imgs_despues": imgs_despues   
             }
             
