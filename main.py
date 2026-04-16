@@ -177,7 +177,6 @@ def main():
         ]
         
         try:
-            # Uso de get_all() en lugar de top() para evitar el límite de 5000 y traer todo el histórico
             items = sp_list.items.select(columnas_req).expand(["AttachmentFiles"]).get_all().execute_query()
         except Exception:
             columnas_req.remove("AttachmentFiles")
@@ -192,7 +191,7 @@ def main():
             p = item.properties
             item_id = int(p.get("ID", 0))
             
-            # --- MAPEO EXACTO A NOMBRES INTERNOS (Ahora leyendo field_12) ---
+            # --- MAPEO EXACTO A NOMBRES INTERNOS ---
             clase_str = limpiar(p.get("field_12")).title() or "General"
             
             # --- FILTRO DE CLASES ---
@@ -357,10 +356,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         select:focus, input:focus {{ border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }}
         .btn-clean {{ background: white; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: 0.2s; margin-top: 10px; width: 100%; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; }}
         .btn-clean:hover {{ background: var(--danger); color: white; }}
-
-        .range-box {{ display: flex; align-items: center; gap: 8px; justify-content: space-between; }}
-        .range-box select {{ width: 100%; padding: 6px 10px; font-size: 0.8rem; }}
-        .range-box span {{ font-size: 0.85rem; color: var(--muted); font-weight: bold; text-transform: lowercase; }}
 
         .kpi-row-mini {{ display: flex; justify-content: space-between; margin-bottom: 15px; }}
         .kpi-box {{ text-align: center; }} .k-label {{ display: block; font-size: 0.7rem; color: var(--muted); font-weight: 700; }}
@@ -565,20 +560,30 @@ def generar_html_moderno(db_json, titulo_dashboard):
     const records = Object.values(db).sort((a,b) => b.id_real - a.id_real);
     const weeks = [...new Set(records.map(x=>x.semana).filter(x=>x!=="S/N"))].sort((a,b)=>{{ let na=parseInt(a), nb=parseInt(b); return (isNaN(na)||isNaN(nb)) ? a.localeCompare(b) : na-nb; }});
     
-    // NOMBRES MESES - FORMATO VISUAL
+    // NOMBRES MESES - LÓGICA DE AGRUPACIÓN POR AÑO
     const nombresMeses = {{ '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre' }};
     
-    const rawMonths = [...new Set(records.map(x => {{
+    let uniqueTimeCats = new Map();
+    records.forEach(x => {{
         if (x.f_lev && x.f_lev !== '--' && x.f_lev.includes('-')) {{
             let p = x.f_lev.split('-');
-            if(p.length >= 3 && p[2] === '2026') {{
-                return p[1]; 
+            if(p.length >= 3) {{
+                let y = parseInt(p[2]);
+                let m = p[1];
+                if (y === 2026) {{
+                    uniqueTimeCats.set('2026-' + m, nombresMeses[m] + ' 2026');
+                }} else if (y === 2025) {{
+                    uniqueTimeCats.set('2025-00', '2025');
+                }} else if (y === 2024) {{
+                    uniqueTimeCats.set('2024-00', '2024');
+                }}
             }}
         }}
-        return null;
-    }}))].filter(x => x !== null).sort(); 
+    }});
     
-    const months = rawMonths.map(m => nombresMeses[m] + ' 2026');
+    // Ordenamos cronológicamente usando las keys y extraemos los valores limpios
+    const sortedKeys = Array.from(uniqueTimeCats.keys()).sort();
+    const months = sortedKeys.map(k => uniqueTimeCats.get(k));
     
     let appState = {{ statusFilter: 'all', view: 'list' }};
     let currentChartData = [];
@@ -600,7 +605,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         }};
 
         let html = '';
-        html += `<div class="f-group"><label>📅 Semana</label><div class="range-box"><select id="f_s1" onchange="applyFilters()"></select><span>a</span><select id="f_s2" onchange="applyFilters()"></select></div></div>`;
         html += createSelect('f_mes', '🗓️ Mes Levantamiento', months);
         html += createSelect('f_clase', '🏷️ Clase', [...new Set(records.map(x=>x.clase))].sort());
         
@@ -612,23 +616,12 @@ def generar_html_moderno(db_json, titulo_dashboard):
         }}
 
         fDiv.innerHTML = html;
-
-        const s1 = document.getElementById('f_s1');
-        const s2 = document.getElementById('f_s2');
-        if(s1 && s2) {{
-            weeks.forEach((w, i) => {{ s1.add(new Option(w, i)); s2.add(new Option(w, i)); }});
-            if(weeks.length > 0) s2.value = weeks.length - 1;
-        }}
     }}
 
     function resetFilters() {{
         const searchInput = document.getElementById('search_input');
         if (searchInput) searchInput.value = '';
         document.querySelectorAll('.f-group select').forEach(sel => sel.value = "ALL");
-        if(weeks.length > 0) {{
-            document.getElementById('f_s1').value = 0;
-            document.getElementById('f_s2').value = weeks.length - 1;
-        }}
         applyFilters();
     }}
 
@@ -665,9 +658,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
     }}
 
     function getFilteredData() {{
-        const s1 = document.getElementById('f_s1') ? document.getElementById('f_s1').selectedIndex : 0;
-        const s2 = document.getElementById('f_s2') ? document.getElementById('f_s2').selectedIndex : 999;
-        
         const uEl = document.getElementById('f_ubi');
         const uVal = uEl ? uEl.value : 'ALL';
         
@@ -709,17 +699,20 @@ def generar_html_moderno(db_json, titulo_dashboard):
                 const text = `${{d.titulo}} ${{d.ot || ''}} ${{d.tag}}`.toLowerCase();
                 if (!text.includes(searchVal)) return false;
             }}
-
-            const wIdx = weeks.indexOf(d.semana);
-            if (wIdx !== -1 && (wIdx < s1 || wIdx > s2)) return false;
             
             if (mVal !== 'ALL') {{
                 let dMes = null;
                 if(d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {{
                     let p = d.f_lev.split('-');
-                    if (p.length >= 3 && p[2] === '2026') {{
-                        const nombresMeses = {{ '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre' }};
-                        dMes = nombresMeses[p[1]] + ' 2026';
+                    if (p.length >= 3) {{
+                        let y = parseInt(p[2]);
+                        if (y === 2026) {{
+                            dMes = nombresMeses[p[1]] + ' 2026';
+                        }} else if (y === 2025) {{
+                            dMes = '2025';
+                        }} else if (y === 2024) {{
+                            dMes = '2024';
+                        }}
                     }}
                 }}
                 if (dMes !== mVal) return false;
@@ -967,7 +960,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         }});
 
         let stats = {{ ok:0, pend:0, pre:0, prog:0, loc:{{}}, wCounts:{{}}, cCounts:{{}}, mCounts:{{}} }};
-        weeks.forEach(w => stats.wCounts[w] = {{total:0, ok:0, pre:0}});
         
         data.forEach(d => {{
             let isOk = (d.status === 'realizada' || d.status === 'cerrada');
@@ -984,31 +976,26 @@ def generar_html_moderno(db_json, titulo_dashboard):
             stats.loc[l].total++;
             if(d.prioridad==='1') stats.loc[l].critical++;
             
-            if(d.semana!=="S/N" && stats.wCounts[d.semana]) {{
-                stats.wCounts[d.semana].total++;
-                if(isOk) stats.wCounts[d.semana].ok++;
-                if(isPre) stats.wCounts[d.semana].pre++;
-            }}
-
             let catMensual = null;
             let sortKey = null;
             
-            // --- MODIFICACIÓN PARA SEPARAR 2024 y 2025 ---
             if (d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {{
                 let p = d.f_lev.split('-'); 
                 if (p.length >= 3) {{
                     let y = parseInt(p[2]);
                     let m = p[1];
-                    if (y < 2026) {{
-                        catMensual = 'Arrastre ' + y;
-                        sortKey = y + '-00'; 
-                    }} else {{
-                        catMensual = m + '-' + y;
-                        sortKey = y + '-' + m; 
+                    if (y === 2026) {{
+                        catMensual = nombresMeses[m] + ' 2026';
+                        sortKey = '2026-' + m; 
+                    }} else if (y === 2025) {{
+                        catMensual = '2025';
+                        sortKey = '2025-00'; 
+                    }} else if (y === 2024) {{
+                        catMensual = '2024';
+                        sortKey = '2024-00'; 
                     }}
                 }}
             }}
-            // -----------------------------------------------
             
             if (catMensual) {{
                 if (!stats.mCounts[catMensual]) {{
