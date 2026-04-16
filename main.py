@@ -19,10 +19,12 @@ from office365.runtime.auth.user_credential import UserCredential
 SITE_URL = "https://teams.wal-mart.com/sites/EquipoPlanificacin"
 LIST_NAME = "Seguimiento Infraestructura"
 
-# ⚠️ SEGURIDAD GITHUB: Lee la clave desde "GitHub Secrets".
+# ⚠️ SEGURIDAD GITHUB: Lee la clave desde "GitHub Secrets". 
+# Si no la encuentra (en local), usa la por defecto.
 USERNAME = os.environ.get("SP_USERNAME", "r0r0noi@cl.wal-mart.com")
 PASSWORD = os.environ.get("SP_PASSWORD", "fiXed.sPout+8")
 
+# Archivo de salida para GitHub Pages
 OUTPUT_HTML = "index.html"
 
 # ==========================================
@@ -44,51 +46,65 @@ def formatear_fecha(texto_fecha):
     if pd.isna(texto_fecha) or not texto_fecha or str(texto_fecha).strip() == "": 
         return "--"
     try:
+        # SharePoint envía fechas como "YYYY-MM-DDTHH:MM:SSZ", limpiamos la 'T'
         s = str(texto_fecha).strip().split("T")[0].split(" ")[0]
         s = s.replace("/", "-") 
+        
         p = s.split("-")
         if len(p) == 3:
-            if len(p[0]) == 4: return f"{p[2].zfill(2)}-{p[1].zfill(2)}-{p[0]}"
-            else: return f"{p[0].zfill(2)}-{p[1].zfill(2)}-{p[2]}"
+            if len(p[0]) == 4: 
+                return f"{p[2].zfill(2)}-{p[1].zfill(2)}-{p[0]}"
+            else: 
+                return f"{p[0].zfill(2)}-{p[1].zfill(2)}-{p[2]}"
         return s
-    except: return str(texto_fecha)
+    except: 
+        return str(texto_fecha)
 
 def descargar_foto_por_url(ctx, url):
     try:
         url = unquote(url)
         if url.startswith("http"): url = urlparse(url).path
+        
         file_content = io.BytesIO()
         ctx.web.get_file_by_server_relative_url(url).download(file_content).execute_query()
         file_content.seek(0)
+        
         if len(file_content.getvalue()) > 0:
             with Image.open(file_content) as img:
                 if img.mode != "RGB": img = img.convert("RGB")
-                img.thumbnail((400, 400))
+                img.thumbnail((400, 400)) # Compresión para web
                 buf = io.BytesIO()
                 img.save(buf, format='JPEG', quality=60)
                 return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
-    except Exception: pass
+    except Exception:
+        pass
     return None
 
 def extraer_fotos_columna(ctx, p, col_name, item_id):
+    """Extrae múltiples imágenes de una columna y devuelve una LISTA de Base64"""
     imgs_b64 = []
     json_raw = p.get(col_name)
     if json_raw:
         try:
             data = json.loads(json_raw) if isinstance(json_raw, str) else json_raw
-            if isinstance(data, dict): data = [data]
+            if isinstance(data, dict):
+                data = [data] # Convertimos a lista si es solo una foto
+            
             if isinstance(data, list):
                 for img_data in data:
                     if isinstance(img_data, dict):
                         url = img_data.get("serverRelativeUrl") or img_data.get("serverUrl") or img_data.get("Url")
                         filename = img_data.get("fileName")
                         b64 = None
-                        if url: b64 = descargar_foto_por_url(ctx, url)
+                        if url: 
+                            b64 = descargar_foto_por_url(ctx, url)
                         if not b64 and filename:
                             rel_site = SITE_URL.replace("https://teams.wal-mart.com", "")
                             url_adj = f"{rel_site}/Lists/{LIST_NAME}/Attachments/{item_id}/{filename}"
                             b64 = descargar_foto_por_url(ctx, url_adj)
-                        if b64: imgs_b64.append(b64)
+                        
+                        if b64:
+                            imgs_b64.append(b64)
         except: pass
     return imgs_b64
 
@@ -98,29 +114,46 @@ def extraer_fotos_columna(ctx, p, col_name, item_id):
 def generar_excel_calidad_b64(db_json):
     data = []
     resp_str = "Michael Bahamodes (Mantenimiento)\nEvelio Revilla (Supervisor de producción)\nBarbara Gajardo (Gestión industrial)\nLeticia Sánchez (Prevenciòn de riesgo)\nNicolas Hermosilla (ISS)\nPilar Coronado (ISS)\nValentina Romo (Logística)"
+    
     for key, item in db_json.items():
         if item.get('origen') == 'act' and "calidad" in str(item.get('clase', '')).lower():
             obs_full = item.get('observacion1', '')
-            if item.get('observacion2', ''): obs_full += f"\n{item.get('observacion2', '')}"
+            if item.get('observacion2', ''):
+                obs_full += f"\n{item.get('observacion2', '')}"
+                
             row = {
-                "PLANTA": "MASAS", "Fecha de inspección": item.get('f_lev', ''), "Codigo": "R-ISO05-07",
-                "PLANTA2": 2, "RESPONSABLES DE INSPECCIÓN (NOMBRES y ÁREAS)": resp_str,
-                "ÁREA A INSPECCIONAR": item.get('ubicacion', ''), "Zonas de foco": "", 
-                "CUMPLIMIENTO": item.get('status', '').upper(), "DESCRICIÓN DEL HALLAZGO": item.get('actividad', '') or item.get('titulo', ''),
+                "PLANTA": "MASAS",
+                "Fecha de inspección": item.get('f_lev', ''),
+                "Codigo": "R-ISO05-07",
+                "PLANTA2": 2,
+                "RESPONSABLES DE INSPECCIÓN (NOMBRES y ÁREAS)": resp_str,
+                "ÁREA A INSPECCIONAR": item.get('ubicacion', ''),
+                "Zonas de foco": "", 
+                "CUMPLIMIENTO": item.get('status', '').upper(),
+                "DESCRICIÓN DEL HALLAZGO": item.get('actividad', '') or item.get('titulo', ''),
                 "INDICAR SI CORRESPONDE A TEMAS DE: LIMPIEZA Y ORDEN / MANTENIMIENTO / INFRAESTRUCTURA / EQUIPOS": "", 
-                "CRITICIDAD (MENOR, MAYOR, CRITICA)": "", "RESPONSABLE DE CIERRE": item.get('ejecutor', ''),  
-                "FECHA DE CIERRE": item.get('f_cie', ''), "SAP": "", "OT": item.get('ot', ''), 
-                "ESTADO (ABIERTO/EN PROCESO/CERRADO)": item.get('status', '').upper(), "Comentarios": obs_full, "TAG": item.get('tag', '') 
+                "CRITICIDAD (MENOR, MAYOR, CRITICA)": "",
+                "RESPONSABLE DE CIERRE": item.get('ejecutor', ''),  
+                "FECHA DE CIERRE": item.get('f_cie', ''),            
+                "SAP": "", 
+                "OT": item.get('ot', ''), 
+                "ESTADO (ABIERTO/EN PROCESO/CERRADO)": item.get('status', '').upper(),
+                "Comentarios": obs_full, 
+                "TAG": item.get('tag', '') 
             }
             data.append(row)
+            
     if not data: return None
+
     df = pd.DataFrame(data)
     cols_orden = ["PLANTA", "Fecha de inspección", "Codigo", "PLANTA2", "RESPONSABLES DE INSPECCIÓN (NOMBRES y ÁREAS)", "ÁREA A INSPECCIONAR", "Zonas de foco", "CUMPLIMIENTO", "DESCRICIÓN DEL HALLAZGO", "INDICAR SI CORRESPONDE A TEMAS DE: LIMPIEZA Y ORDEN / MANTENIMIENTO / INFRAESTRUCTURA / EQUIPOS", "CRITICIDAD (MENOR, MAYOR, CRITICA)", "RESPONSABLE DE CIERRE", "FECHA DE CIERRE", "SAP", "OT", "ESTADO (ABIERTO/EN PROCESO/CERRADO)", "Comentarios", "TAG"]
     for c in cols_orden:
         if c not in df.columns: df[c] = ""
     df = df[cols_orden] 
+    
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer: df.to_excel(writer, index=False, sheet_name='Base Calidad')
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Base Calidad')
     return base64.b64encode(output.getvalue()).decode()
 
 # ==========================================
@@ -129,19 +162,24 @@ def generar_excel_calidad_b64(db_json):
 def main():
     try:
         print("🚀 INICIANDO EXTRACCIÓN DIRECTA DESDE SHAREPOINT...")
+        
         ctx = ClientContext(SITE_URL).with_credentials(UserCredential(USERNAME, PASSWORD))
         sp_list = ctx.web.lists.get_by_title(LIST_NAME)
         
-        # CORREGIDO: ClaseMU -> ClaseM
+        print("   ⏳ Solicitando registros y adjuntos...")
+        
+        # Mapeo actualizado de las columnas según tu tabla:
         columnas_req = [
             "ID", "Title", "LinkTitle", "field_1", "field_2", "field_3", 
             "field_4", "field_5", "field_6", "field_7", "field_8", 
-            "field_9", "field_10", "field_11", "field_12", "field_14", 
-            "field_15", "Antes", "Despues", "Zona", "ClaseM", "Attachments"
+            "field_9", "field_10", "field_11", "field_14", "field_15", 
+            "Antes", "Despues", "Estado", "ClaseM", "Attachments", "AttachmentFiles"
         ]
         
-        try: items = sp_list.items.select(columnas_req).expand(["AttachmentFiles"]).top(5000).get().execute_query()
+        try:
+            items = sp_list.items.select(columnas_req).expand(["AttachmentFiles"]).top(5000).get().execute_query()
         except Exception:
+            columnas_req.remove("AttachmentFiles")
             items = sp_list.items.select(columnas_req).top(5000).get().execute_query()
             
         total_main = len(items)
@@ -153,60 +191,99 @@ def main():
             p = item.properties
             item_id = int(p.get("ID", 0))
             
-            # CORREGIDO: ClaseMU -> ClaseM
+            # --- MAPEO EXACTO A NOMBRES INTERNOS ---
             clase_str = limpiar(p.get("ClaseM")).title() or "General"
-            semana = limpiar(p.get("field_1"))
-            f_lev = formatear_fecha(p.get("field_2"))
-            f_cie = formatear_fecha(p.get("field_3"))
-            act_str = limpiar(p.get("field_4"))
-            ubicacion = limpiar(p.get("field_5"))
-            ot = limpiar(p.get("field_7"))
-            ejecutor = limpiar(p.get("field_9"))
-            prio_raw = normalizar_texto(limpiar(p.get("field_10")))
-            status_raw = normalizar_texto(limpiar(p.get("field_11")))
-            tag_id = limpiar(p.get("LinkTitle"))
-            obs1 = limpiar(p.get("field_14"))
-            obs2 = limpiar(p.get("field_15"))
-
+            
             # --- FILTRO DE CLASES ---
             clase_norm = normalizar_texto(clase_str)
             if not any(x in clase_norm for x in ["calidad", "sanitizacion", "infraestructura"]):
                 continue 
+            # -----------------------------------
 
-            has_asignacion = bool(ejecutor and ejecutor.strip() and ejecutor.lower() != "sin asignar")
+            tag_id = limpiar(p.get("LinkTitle"))
+            semana = limpiar(p.get("field_1"))
+            f_lev = formatear_fecha(p.get("field_2"))
+            f_cie = formatear_fecha(p.get("field_3"))
+            
+            act_str = limpiar(p.get("field_4"))
+            ubicacion = limpiar(p.get("field_5"))
+            ot = limpiar(p.get("field_7"))
+            solped = limpiar(p.get("field_8")) 
+            ejecutor = limpiar(p.get("field_9"))
+            
+            prio_raw = normalizar_texto(limpiar(p.get("field_10")))
+            status_raw = normalizar_texto(limpiar(p.get("field_11")))
+            estado_txt = normalizar_texto(limpiar(p.get("Estado"))) # Mapeando la columna "Estado"
+            
+            obs1 = limpiar(p.get("field_14"))
+            obs2 = limpiar(p.get("field_15"))
+            
+            # Lógica de estados 
+            has_asignacion = bool(ejecutor and ejecutor.strip() and ejecutor.lower() != "sin asignar" and ejecutor != "0")
             has_ejecutado = any(k in status_raw for k in ['ok', 'listo', 'cerrad', 'realiza', 'complet'])
+            has_cierre = any(k in estado_txt for k in ['cerrad', 'ok', 'complet'])
             is_calidad = "calidad" in clase_str.lower()
 
             if is_calidad:
-                if has_ejecutado: status = "realizada"
-                else: status = "pendiente"
+                if has_cierre: 
+                    status = "realizada"
+                elif has_ejecutado: 
+                    status = "precierre"
+                else: 
+                    status = "pendiente"
             else:
-                if has_ejecutado: status = "realizada"
-                else: status = "pendiente"
+                if has_cierre or has_ejecutado:
+                    status = "realizada"
+                else:
+                    status = "pendiente"
 
-            if "0" in prio_raw or "alta" in prio_raw or "1" in prio_raw: prio = "1"
-            elif "media" in prio_raw or "2" in prio_raw: prio = "2"
-            else: prio = "3"
+            # Lógica de criticidad
+            if prio_raw: 
+                if "calavera" in prio_raw or "☠" in prio_raw or prio_raw == "0" or "alta" in prio_raw or "1" in prio_raw:
+                    prio = "1"
+                elif "media" in prio_raw or "2" in prio_raw:
+                    prio = "2"
+                else:
+                    prio = "3"
+            else:
+                prio = "3"
 
+            # Extracción de fotos (lista de base64)
             imgs_antes = extraer_fotos_columna(ctx, p, "Antes", item_id)
             imgs_despues = extraer_fotos_columna(ctx, p, "Despues", item_id)
 
             key_id = f"MTTO_{item_id}"
             db_act[key_id] = {
-                "key_id": key_id, "id_real": item_id, "titulo": act_str or tag_id or f"OT #{item_id}", 
-                "tag": tag_id, "semana": semana or "S/N", "ejecutor": ejecutor or "Sin Asignar",
-                "prioridad": prio, "ubicacion": ubicacion or "Sin Ubicación",
-                "ot": ot, "f_lev": f_lev, "f_cie": f_cie, "actividad": act_str, 
-                "observacion1": obs1, "observacion2": obs2, "status": status, 
-                "has_asignacion": has_asignacion, "clase": clase_str, "origen": "act", 
-                "imgs_antes": imgs_antes, "imgs_despues": imgs_despues   
+                "key_id": key_id, 
+                "id_real": item_id, 
+                "titulo": act_str or tag_id or f"Actividad #{item_id}", 
+                "tag": tag_id,
+                "semana": semana or "S/N", 
+                "ejecutor": ejecutor or "Sin Asignar",
+                "prioridad": prio, 
+                "ubicacion": ubicacion or "Sin Ubicación",
+                "ot": ot, 
+                "solped": solped, 
+                "f_lev": f_lev, 
+                "f_cie": f_cie,
+                "actividad": act_str, 
+                "observacion1": obs1, 
+                "observacion2": obs2, 
+                "status": status, 
+                "has_asignacion": has_asignacion,
+                "has_ejecutado": has_ejecutado,
+                "has_cierre": has_cierre,
+                "clase": clase_str, 
+                "origen": "act", 
+                "imgs_antes": imgs_antes,    
+                "imgs_despues": imgs_despues   
             }
             
         print(f"\n   ✅ Total Actividades mapeadas: {len(db_act)}")
-        generar_html_moderno(db_act, "Panel Infraestructura")
+        generar_html_moderno(db_act, "Actividades Infraestructura")
 
     except Exception as e: 
-        print(f"\n❌ Error Fatal: {e}")
+        print(f"\n❌ Error Fatal en script: {e}")
         import traceback
         traceback.print_exc()
 
@@ -214,7 +291,12 @@ def main():
 # 5. GENERADOR HTML
 # ==========================================
 def generar_html_moderno(db_json, titulo_dashboard):
-    if not db_json: return None
+    if not db_json:
+        print(f"⚠️ No hay datos para generar.")
+        return None
+
+    print(f"\n🔨 Construyendo archivo HTML...")
+    
     fecha_actual = datetime.now(ZoneInfo("America/Santiago")).strftime("%d/%m/%Y %H:%M")
     
     download_btn = ""
@@ -222,6 +304,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
     if b64_excel:
         download_btn = f'<div id="btn_dl_container"><a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_excel}" download="Base_Calidad.xlsx" class="seg-btn" style="text-decoration:none; display:flex; align-items:center; background:#dcfce7; color:#166534; border:1px solid #166534; border-radius:4px; padding:4px 12px; font-weight:bold; font-size:0.85rem;">📥 Descargar Calidad</a></div>'
 
+    # Pasamos el JSON seguro
     json_seguro = json.dumps(db_json).replace("</", "<\\/")
 
     full_html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Dashboard - {titulo_dashboard}</title>
@@ -232,54 +315,77 @@ def generar_html_moderno(db_json, titulo_dashboard):
     <style>
         :root {{ --primary: #0f172a; --secondary: #334155; --accent: #2563eb; --bg: #f8fafc; --border: #e2e8f0; --text: #1e293b; --muted: #64748b; --success: #10b981; --warn: #f59e0b; --danger: #ef4444; --info: #3b82f6; }}
         * {{ box-sizing: border-box; outline: none; font-family: 'Segoe UI', system-ui, sans-serif; }}
+        
+        /* Fondo transparente para que se vean las partículas detrás */
         body {{ background: transparent; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }}
+        
         .top-bar {{ background: var(--primary); color: white; padding: 0 20px; height: 60px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
         .brand h2 {{ margin: 0; font-size: 1.2rem; display:flex; align-items:center; gap: 8px; }} 
-        .brand span {{ color: #fbbf24; font-weight: 700; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; }}
+        .brand span {{ opacity: 0.7; font-weight: 300; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; }}
+        
         .tabs-container {{ background: #fff; border-bottom: 1px solid var(--border); padding: 0 20px; flex-shrink: 0; display:flex; justify-content: space-between; z-index: 5; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
         .tabs-nav {{ display: flex; gap: 15px; }}
         .tab-btn {{ background: none; border: none; padding: 15px 5px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; font-size: 0.95rem; }}
         .tab-btn:hover {{ color: var(--accent); }} .tab-btn.active {{ color: var(--accent); border-bottom-color: var(--accent); }}
+        
         .app-layout {{ display: flex; height: calc(100vh - 110px); width: 100%; overflow: hidden; }}
+        
+        /* Listas y Filtros sólidos para fácil lectura */
         .col-filters {{ width: 280px; background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; z-index: 5; }}
-        .filters-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 700; color: var(--primary); font-size: 0.9rem; text-transform: uppercase; background: #f8fafc; }}
+        .filters-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 700; color: var(--primary); font-size: 0.9rem; text-transform: uppercase; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; }}
         .filters-body {{ flex: 1; overflow-y: auto; padding: 20px; min-height: 0; }} 
         .filters-footer {{ padding: 20px; border-top: 1px solid var(--border); background: #f8fafc; flex-shrink: 0; }}
+        
         .col-list {{ width: 380px; background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }}
         .list-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 600; background: #f8fafc; color: var(--secondary); font-size: 0.9rem; flex-shrink: 0; display:flex; flex-direction:column; gap:12px; }}
         .list-scroll-area {{ flex: 1; overflow-y: auto; min-height: 0; }}
+        
+        /* Contenedores transparentes para mostrar el canvas (efecto de partículas) */
         .col-detail {{ flex: 1; background: transparent; overflow-y: auto; padding: 40px; }}
         .graficos-layout {{ flex: 1; padding: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px; overflow-y: auto; background: transparent; align-content:start; }}
+        
+        /* Las tarjetas de contenido se mantienen blancas para legibilidad */
         .detail-content {{ background: white; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); overflow: hidden; max-width: 1000px; margin: 0 auto; border: 1px solid var(--border); }}
         .chart-card {{ background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column; height: 400px; width: 100%; }}
         .chart-card.wide {{ grid-column: 1 / -1; height: 480px; }}
+        
         .f-group {{ margin-bottom: 15px; }}
         .f-group label {{ font-size: 0.75rem; font-weight: 700; color: var(--muted); display: block; margin-bottom: 6px; text-transform: uppercase; }}
         select, input {{ width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; color: var(--text); }}
         select:focus, input:focus {{ border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }}
         .btn-clean {{ background: white; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: 0.2s; margin-top: 10px; width: 100%; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; }}
         .btn-clean:hover {{ background: var(--danger); color: white; }}
+
         .range-box {{ display: flex; align-items: center; gap: 8px; justify-content: space-between; }}
         .range-box select {{ width: 100%; padding: 6px 10px; font-size: 0.8rem; }}
         .range-box span {{ font-size: 0.85rem; color: var(--muted); font-weight: bold; text-transform: lowercase; }}
+
         .kpi-row-mini {{ display: flex; justify-content: space-between; margin-bottom: 15px; }}
         .kpi-box {{ text-align: center; }} .k-label {{ display: block; font-size: 0.7rem; color: var(--muted); font-weight: 700; }}
         .k-num {{ display: block; font-size: 1.3rem; font-weight: 800; color: var(--primary); }} .k-ok {{ color: var(--success); }} .k-pend {{ color: var(--danger); }}
         .prog-title {{ display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }}
         .progress-bar-container {{ width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }}
         .progress-bar-fill {{ height: 100%; background: var(--success); width: 0%; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }}
+        
         .list-item {{ padding: 15px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: 0.2s; border-left: 4px solid transparent; }}
         .list-item:hover {{ background: #f8fafc; }} .list-item.selected {{ background: #eff6ff; border-left-color: var(--accent); }}
         .li-top {{ display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.75rem; color: var(--muted); font-weight: 600; }}
         .li-title {{ font-weight: 700; font-size: 0.95rem; color: var(--primary); margin-bottom: 10px; line-height: 1.4; }}
         .li-btm {{ display: flex; justify-content: space-between; font-size: 0.75rem; align-items: center; }}
+        
         .tag {{ padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.3px; }}
         .st-ok {{ background: #dcfce7; color: #166534; }} .st-pend {{ background: #fee2e2; color: #991b1b; }} .st-prog {{ background: #e0f2fe; color: #075985; }} .st-proc {{ background: #fef3c7; color: #92400e; }}
+        
         .empty-state {{ display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); opacity: 0.7; }}
         .detail-header {{ padding: 30px; border-bottom: 1px solid var(--border); background: #fff; }}
         .dh-top {{ display: flex; justify-content: space-between; margin-bottom: 15px; align-items:center; }}
         .detail-header h2 {{ margin: 0 0 5px 0; font-size: 1.6rem; color: var(--primary); }}
-        @keyframes pulse-ring {{ 0% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }} 70% {{ box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }} 100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }} }}
+        
+        @keyframes pulse-ring {{
+            0% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
+            70% {{ box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }}
+            100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }}
+        }}
         .ticket-step-container {{ display: flex; justify-content: space-between; position: relative; width: 100%; max-width: 700px; margin: 0 auto; padding: 25px 0; }}
         .ticket-step-bg {{ position: absolute; top: 40px; left: 10%; right: 10%; height: 4px; background: #e2e8f0; z-index: 1; border-radius: 2px; }}
         .ticket-step-fill {{ position: absolute; top: 40px; left: 10%; height: 4px; background: var(--success); z-index: 2; transition: width 0.6s ease; border-radius: 2px; }}
@@ -289,31 +395,39 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .ticket-step.current .ticket-step-circle {{ animation: pulse-ring 2s infinite; border-color: var(--success); background: var(--success); color: white; }}
         .ticket-step-label {{ font-size: 0.75rem; font-weight: 700; color: var(--muted); transition: color 0.4s ease; text-transform: uppercase; }}
         .ticket-step.active .ticket-step-label, .ticket-step.current .ticket-step-label {{ color: var(--primary); }}
+
         .data-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 25px; padding: 30px; background: #fff; border-bottom: 1px solid var(--border); }}
         .dg-item small {{ display: block; font-size: 0.7rem; color: var(--muted); font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }}
         .dg-item strong {{ font-size: 1rem; color: var(--text); }}
+        
         .obs-box {{ padding: 30px; border-bottom: 1px solid var(--border); }}
         .obs-box h4 {{ margin: 0 0 12px; color: var(--secondary); font-size: 0.9rem; text-transform: uppercase; }}
         .obs-box p {{ background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid var(--border); margin: 0; line-height: 1.6; color: #334155; }}
+        
         .gallery-section {{ padding: 30px; background: #f8fafc; display:flex; flex-direction: column; gap: 20px; }}
         .photo-card {{ flex: 1; text-align: center; border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }}
         .pc-head {{ font-weight: 700; color: var(--secondary); margin-bottom: 10px; font-size: 0.85rem; text-transform: uppercase; }}
         .gal-img {{ max-width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px; cursor: zoom-in; transition: transform 0.2s; }}
         .gal-img:hover {{ transform: scale(1.02); }}
+        
         .carousel-wrapper {{ position: relative; height: 300px; width: 100%; display: flex; justify-content: center; align-items: center; }}
         .nav-btn {{ position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 50%; font-size: 1.2rem; transition: 0.2s; user-select: none; z-index: 10; }}
         .nav-btn:hover {{ background: rgba(0,0,0,0.8); }}
         .nav-prev {{ left: 5px; }} .nav-next {{ right: 5px; }}
         .img-counter {{ position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.6); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; z-index: 10; }}
+
         .chart-title {{ font-size: 1rem; font-weight: 700; color: var(--secondary); margin-bottom: 15px; text-transform: uppercase; text-align: center; letter-spacing: 0.5px; }}
         .canvas-container {{ position: relative; flex: 1 1 auto; width: 100%; min-height: 0; }}
+        
         .prio-flag {{ padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.75rem; }}
         .p-crit {{ background: #fee2e2; color: #dc2626; border: 1px solid #f87171; }}
         .p-alta {{ background: #ffedd5; color: #ea580c; border: 1px solid #fdba74; }}
         .p-med {{ background: #fef3c7; color: #d97706; border: 1px solid #fcd34d; }}
         .p-baja {{ background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }}
+        
         .modal {{ display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); align-items: center; justify-content: center; backdrop-filter: blur(4px); }}
         .modal img {{ max-width: 90%; max-height: 90vh; border-radius: 8px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }}
+        
         #data_modal_content {{ background: white; width: 90%; max-width: 1200px; max-height: 85vh; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }}
         .dm-header {{ padding: 20px 25px; background: var(--primary); color: white; display: flex; justify-content: space-between; align-items: center; }}
         .dm-header h3 {{ margin: 0; font-size: 1.2rem; font-weight: 600; }}
@@ -334,7 +448,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
     </div>
 
     <div class="top-bar">
-        <div class="brand"><h2>🏭 Seguimiento Mantenimiento <span>{titulo_dashboard}</span></h2></div>
+        <div class="brand"><h2>🏭 Seguimiento de actividades <span>{titulo_dashboard}</span></h2></div>
         <div style="font-size:0.85rem; font-weight:600; opacity:0.9; display:flex; gap:15px; align-items:center;">
             {download_btn}
             <span>Actualizado: {fecha_actual}</span>
@@ -349,21 +463,17 @@ def generar_html_moderno(db_json, titulo_dashboard):
             <button class="tab-btn" onclick="setTab('realizada', this)">Realizadas</button>
             <button class="tab-btn" onclick="setView('charts', this)">📊 Gráficos</button>
         </div>
-        <div style="display:flex; gap:10px;">
-            <button onclick="descargarExcel()" class="btn-clean" style="margin: 0; padding: 8px 15px; width: auto; border-color: #10b981; color: #10b981; display: flex; align-items: center; gap: 8px;">
-                <span style="font-size:1.2rem;">📊</span> Exportar Excel
-            </button>
-        </div>
     </div>
     
     <div class="app-layout">
         <div class="col-filters" id="main_filters">
             <div class="filters-header">
-                <span>🔍 Filtros</span>
-                <button onclick="resetFilters()" class="btn-clean" style="margin: 0; padding: 4px 8px; width: auto; font-size: 0.7rem; border-color: #ef4444; color: #ef4444; display: flex; align-items: center; gap: 4px; text-transform: none;">
+                <span>🔍 Filtros Principales</span>
+                <button onclick="resetFilters()" class="btn-clean" style="margin: 0; padding: 4px 8px; width: auto; font-size: 0.7rem; border-color: #ef4444; color: #ef4444; display: flex; align-items: center; gap: 4px; text-transform: none; letter-spacing: normal;" title="Limpiar todos los filtros">
                     🧹 Borrar
                 </button>
             </div>
+            
             <div class="filters-body" id="filters_dynamic"></div>
             <div class="filters-footer">
                 <div class="kpi-row-mini">
@@ -381,12 +491,12 @@ def generar_html_moderno(db_json, titulo_dashboard):
             <div class="col-list">
                 <div class="list-header" style="display: flex; flex-direction: column; gap: 10px;">
                     <div>📋 Registros</div>
-                    <input type="text" id="search_input" placeholder="🔍 Buscar TAG o Título..." onkeyup="applyFilters()" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.8rem; outline: none;">
+                    <input type="text" id="search_input" placeholder="🔍 Buscar TAG o Título..." onkeyup="applyFilters()" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.8rem; outline: none; transition: border-color 0.2s;">
                 </div>
                 <div id="list_container" class="list-scroll-area"></div>
             </div>
             <div class="col-detail">
-                <div id="empty_state" class="empty-state"><div style="font-size:4rem; margin-bottom:15px;">📋</div><h3 style="margin:0">Selecciona un registro</h3></div>
+                <div id="empty_state" class="empty-state"><div style="font-size:4rem; margin-bottom:15px;">📋</div><h3 style="margin:0">Selecciona un registro</h3><p>Usa la lista izquierda para ver detalles.</p></div>
                 <div id="detail_view" class="detail-content" style="display:none">
                     <div class="detail-header">
                         <div class="dh-top">
@@ -410,8 +520,8 @@ def generar_html_moderno(db_json, titulo_dashboard):
 
                     <div class="data-grid" id="d_grid"></div>
                     
-                    <div class="obs-box" id="box_obs1"><h4 id="lbl_obs_title">📝 Observación</h4><p id="d_obs">--</p></div>
-                    <div class="obs-box" id="box_obs2" style="display:none;"><h4 id="lbl_obs_title2">📝 Observación 2</h4><p id="d_obs2">--</p></div>
+                    <div class="obs-box" id="box_obs1"><h4 id="lbl_obs_title">📝 Observación Técnica</h4><p id="d_obs">--</p></div>
+                    <div class="obs-box" id="box_obs2" style="display:none;"><h4 id="lbl_obs_title2">📝 Observación Adicional</h4><p id="d_obs2">--</p></div>
                     
                     <div class="gallery-section" id="d_gallery_sec" style="display:none;">
                         <div style="display: flex; gap: 20px; width: 100%; justify-content: center; flex-wrap: wrap;">
@@ -429,6 +539,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
                             <div id="d_img_single" class="carousel-wrapper"></div>
                         </div>
                     </div>
+
                 </div>
             </div>
         </div>
@@ -484,6 +595,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         html += `<div class="f-group"><label>📅 Semana</label><div class="range-box"><select id="f_s1" onchange="applyFilters()"></select><span>a</span><select id="f_s2" onchange="applyFilters()"></select></div></div>`;
         html += createSelect('f_mes', '🗓️ Mes Levantamiento', months);
         html += createSelect('f_clase', '🏷️ Clase', [...new Set(records.map(x=>x.clase))].sort());
+        
         html += createSelect('f_ubi', '📍 Ubicación / Área', [...new Set(records.map(x=>x.ubicacion))].sort());
         html += `<div class="f-group"><label>🚨 Prioridad / Criticidad</label><select id="f_prio" onchange="applyFilters()"><option value="ALL">Todas</option><option value="1">🚨 Crítica</option><option value="2">🟡 Mayor</option><option value="3">🟢 Menor</option></select></div>`;
         
@@ -517,8 +629,10 @@ def generar_html_moderno(db_json, titulo_dashboard):
         appState.view = 'list';
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         if(btn) btn.classList.add('active');
+        
         document.getElementById('view_list').style.display = 'flex';
         document.getElementById('view_charts').style.display = 'none';
+
         buildFilters();
         applyFilters();
     }}
@@ -527,6 +641,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         appState.view = view;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         if(btn) btn.classList.add('active');
+        
         document.getElementById('view_list').style.display = 'none';
         document.getElementById('view_charts').style.display = 'none';
 
@@ -544,12 +659,24 @@ def generar_html_moderno(db_json, titulo_dashboard):
     function getFilteredData() {{
         const s1 = document.getElementById('f_s1') ? document.getElementById('f_s1').selectedIndex : 0;
         const s2 = document.getElementById('f_s2') ? document.getElementById('f_s2').selectedIndex : 999;
-        const uEl = document.getElementById('f_ubi'); const uVal = uEl ? uEl.value : 'ALL';
-        const pEl = document.getElementById('f_prio'); const pVal = pEl ? pEl.value : 'ALL';
-        const cEl = document.getElementById('f_clase'); const cVal = cEl ? cEl.value : 'ALL';
-        const stEl = document.getElementById('f_status'); const stVal = stEl ? stEl.value : 'ALL';
-        const searchEl = document.getElementById('search_input'); const searchVal = searchEl ? searchEl.value.toLowerCase().trim() : '';
-        const mEl = document.getElementById('f_mes'); const mVal = mEl ? mEl.value : 'ALL';
+        
+        const uEl = document.getElementById('f_ubi');
+        const uVal = uEl ? uEl.value : 'ALL';
+        
+        const pEl = document.getElementById('f_prio');
+        const pVal = pEl ? pEl.value : 'ALL';
+        
+        const cEl = document.getElementById('f_clase');
+        const cVal = cEl ? cEl.value : 'ALL';
+        
+        const stEl = document.getElementById('f_status');
+        const stVal = stEl ? stEl.value : 'ALL';
+        
+        const searchEl = document.getElementById('search_input');
+        const searchVal = searchEl ? searchEl.value.toLowerCase().trim() : '';
+
+        const mEl = document.getElementById('f_mes');
+        const mVal = mEl ? mEl.value : 'ALL';
 
         return records.filter(d => {{
             if (appState.view === 'charts') {{
@@ -598,6 +725,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
 
     function applyFilters() {{
         currentChartData = getFilteredData();
+        
         let ok = 0; let pre = 0;
         currentChartData.forEach(d => {{ 
             if (d.status === 'realizada' || d.status === 'cerrada') ok++; 
@@ -683,6 +811,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
             if (d.has_asignacion) stepsActive = 2;
             if (d.has_ejecutado) stepsActive = 3;
             if (d.has_cierre) stepsActive = 4;
+            
             let fillWidth = ((stepsActive - 1) / 3) * 80;
             document.getElementById('ticket_step_fill').style.width = fillWidth + '%';
             
@@ -699,6 +828,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         const grid = document.getElementById('d_grid');
         grid.innerHTML = '';
         const createItem = (label, val) => `<div class="dg-item"><small>${{label}}</small><strong>${{val||'--'}}</strong></div>`;
+        
         grid.innerHTML += createItem('🏷️ Clase', d.clase);
         grid.innerHTML += createItem('👷 Responsable', d.ejecutor);
         grid.innerHTML += createItem('📍 Ubicación', d.ubicacion);
@@ -787,6 +917,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
                 found = true;
                 let stColor = (d.status==='realizada' || d.status==='cerrada') ? '#166534' : (d.status==='pendiente' || d.status==='abierta' ? '#991b1b' : '#92400e');
                 let idDisplay = d.ot ? d.ot : (d.tag ? d.tag : '#' + d.id_real);
+                
                 let pText = 'MENOR'; let pColor = '#64748b';
                 if(d.prioridad==='1') {{ pText='🚨 CRÍTICA'; pColor='#dc2626'; }}
                 else if(d.prioridad==='2') {{ pText='🟡 MAYOR'; pColor='#d97706'; }}
@@ -816,26 +947,13 @@ def generar_html_moderno(db_json, titulo_dashboard):
         return document.getElementById(id);
     }}
 
-    function descargarExcel() {
-        if (!currentChartData || currentChartData.length === 0) {
-            alert("No hay datos para exportar.");
-            return;
-        }
-        const datosExcel = currentChartData.map(d => ({
-            "Levantamiento": d.f_lev, "Cierre": d.f_cie, "Actividad": d.actividad, "Clase": d.clase,
-            "Zona": d.zona, "Ubicación": d.ubicacion, "OT": d.ot, "Ejecutor": d.ejecutor,
-            "Status": d.status.toUpperCase(), "Semana": d.semana
-        }));
-        const worksheet = XLSX.utils.json_to_sheet(datosExcel);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Datos");
-        XLSX.writeFile(workbook, `Reporte.xlsx`);
-    }
-
     function drawCharts(data) {{
         if(!data || data.length === 0) return;
+        
         const chartIds = ['chart1', 'chart2', 'chart4', 'chart5', 'chart6'];
-        chartIds.forEach(id => {{ if (chartInstances[id]) {{ chartInstances[id].destroy(); chartInstances[id] = null; }} }});
+        chartIds.forEach(id => {{
+            if (chartInstances[id]) {{ chartInstances[id].destroy(); chartInstances[id] = null; }}
+        }});
 
         let stats = {{ ok:0, pend:0, pre:0, prog:0, loc:{{}}, wCounts:{{}}, cCounts:{{}}, mCounts:{{}} }};
         weeks.forEach(w => stats.wCounts[w] = {{total:0, ok:0, pre:0}});
@@ -843,7 +961,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
         data.forEach(d => {{
             let isOk = (d.status === 'realizada' || d.status === 'cerrada');
             let isPre = (d.status === 'precierre');
-            if(isOk) stats.ok++; else if(isPre) stats.pre++; else stats.pend++;
+            if(isOk) stats.ok++; 
+            else if(isPre) stats.pre++;
+            else stats.pend++;
             
             let miClase = d.clase || 'General';
             stats.cCounts[miClase] = (stats.cCounts[miClase]||0)+1;
@@ -853,17 +973,36 @@ def generar_html_moderno(db_json, titulo_dashboard):
             stats.loc[l].total++;
             if(d.prioridad==='1') stats.loc[l].critical++;
             
-            let catMensual = null; let sortKey = null;
+            if(d.semana!=="S/N" && stats.wCounts[d.semana]) {{
+                stats.wCounts[d.semana].total++;
+                if(isOk) stats.wCounts[d.semana].ok++;
+                if(isPre) stats.wCounts[d.semana].pre++;
+            }}
+
+            let catMensual = null;
+            let sortKey = null;
+            
+            // --- MODIFICACIÓN PARA SEPARAR 2024 y 2025 ---
             if (d.f_lev && d.f_lev !== '--' && d.f_lev.includes('-')) {{
                 let p = d.f_lev.split('-'); 
                 if (p.length >= 3) {{
-                    let y = parseInt(p[2]); let m = p[1];
-                    if (y < 2026) {{ catMensual = 'Arrastre ' + y; sortKey = y + '-00'; }} 
-                    else {{ catMensual = m + '-' + y; sortKey = y + '-' + m; }}
+                    let y = parseInt(p[2]);
+                    let m = p[1];
+                    if (y < 2026) {{
+                        catMensual = 'Arrastre ' + y;
+                        sortKey = y + '-00'; 
+                    }} else {{
+                        catMensual = m + '-' + y;
+                        sortKey = y + '-' + m; 
+                    }}
                 }}
             }}
+            // -----------------------------------------------
+            
             if (catMensual) {{
-                if (!stats.mCounts[catMensual]) stats.mCounts[catMensual] = {{ total:0, ok:0, pre:0, sortKey: sortKey }};
+                if (!stats.mCounts[catMensual]) {{
+                    stats.mCounts[catMensual] = {{ total:0, ok:0, pre:0, sortKey: sortKey }};
+                }}
                 stats.mCounts[catMensual].total++;
                 if(isOk) stats.mCounts[catMensual].ok++;
                 if(isPre) stats.mCounts[catMensual].pre++;
@@ -871,98 +1010,320 @@ def generar_html_moderno(db_json, titulo_dashboard):
         }});
 
         const commonOpts = {{ maintainAspectRatio:false, responsive:true, animation: {{ duration: 800, easing: 'easeOutQuart' }}, plugins: {{ datalabels: {{ display: false }}, legend: {{ labels: {{ usePointStyle: true, boxWidth: 8 }} }} }} }};
-        
-        let finalLabelsMeses = Object.keys(stats.mCounts).sort((a, b) => stats.mCounts[a].sortKey.localeCompare(stats.mCounts[b].sortKey));
+        document.querySelectorAll('.chart-card').forEach(c => c.style.opacity = '1');
+
+        let finalLabelsMeses = Object.keys(stats.mCounts).sort((a, b) => {{
+            return stats.mCounts[a].sortKey.localeCompare(stats.mCounts[b].sortKey);
+        }});
+
         const c6DataLevantadas = finalLabelsMeses.map(m => stats.mCounts[m].total);
         const c6DataCerradas = finalLabelsMeses.map(m => stats.mCounts[m].ok);
         const c6DataPrecierre = finalLabelsMeses.map(m => stats.mCounts[m].pre);
+
+        let c6Datasets = [
+            {{
+                label: 'Levantadas', data: c6DataLevantadas,
+                borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#fff', pointBorderColor: '#3b82f6', pointRadius: 4
+            }},
+            {{
+                label: 'Precierre', data: c6DataPrecierre,
+                borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#fff', pointBorderColor: '#f59e0b', pointRadius: 4
+            }},
+            {{
+                label: 'Cerradas', data: c6DataCerradas,
+                borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#fff', pointBorderColor: '#10b981', pointRadius: 4
+            }}
+        ];
 
         chartInstances['chart6'] = new Chart(getFreshCanvas('chart6'), {{
             type: 'line',
             data: {{
                 labels: finalLabelsMeses,
-                datasets: [
-                    {{ label: 'Levantadas', data: c6DataLevantadas, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.2)', borderWidth: 2, fill: true, tension: 0.4 }},
-                    {{ label: 'Precierre', data: c6DataPrecierre, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.2)', borderWidth: 2, fill: true, tension: 0.4 }},
-                    {{ label: 'Cerradas', data: c6DataCerradas, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 2, fill: true, tension: 0.4 }}
-                ]
+                datasets: c6Datasets
             }},
-            options: {{ ...commonOpts, interaction: {{ mode: 'index', intersect: false }}, scales: {{ x: {{ grid: {{ display: false }} }}, y: {{ beginAtZero: true }} }} }}
+            options: {{
+                ...commonOpts,
+                interaction: {{ mode: 'index', intersect: false }},
+                scales: {{
+                    x: {{ grid: {{ display: false }} }},
+                    y: {{ beginAtZero: true, grid: {{ color: '#e2e8f0' }} }}
+                }},
+                plugins: {{
+                    ...commonOpts.plugins,
+                    legend: {{ position: 'top' }}
+                }}
+            }}
         }});
+
+        let cLabels = ['Cerradas','Precierre','Pendientes'];
+        let cDataDoughnut = [stats.ok, stats.pre, stats.pend];
+        let cBg = ['#10b981','#f59e0b','#ef4444'];
 
         chartInstances['chart1'] = new Chart(getFreshCanvas('chart1'), {{ 
             type: 'doughnut', 
-            data: {{ labels: ['Cerradas','Precierre','Pendientes'], datasets: [{{ data: [stats.ok, stats.pre, stats.pend], backgroundColor: ['#10b981','#f59e0b','#ef4444'], borderWidth: 2, borderColor: '#fff' }}] }}, 
-            options: {{ ...commonOpts, cutout: '70%' }}
+            data: {{ 
+                labels: cLabels, 
+                datasets: [{{ 
+                    data: cDataDoughnut, backgroundColor: cBg, borderWidth: 2, borderColor: '#fff', hoverOffset: 10 
+                }}] 
+            }}, 
+            options: {{ 
+                ...commonOpts, cutout: '70%', 
+                plugins: {{ ...commonOpts.plugins, legend: {{ position: 'bottom' }} }}, 
+                onClick: (e, els, ch) => {{ 
+                    if(els.length>0) {{
+                        showDataModal(ch.data.labels[els[0].index], d => {{ 
+                            let st = ch.data.labels[els[0].index]; 
+                            if(st==='Cerradas') return d.status==='realizada' || d.status==='cerrada'; 
+                            if(st==='Precierre') return d.status==='precierre';
+                            if(st==='Pendientes') return d.status==='pendiente' || d.status==='abierta'; 
+                            return d.status==='programado' || d.status==='tratando'; 
+                        }}); 
+                    }}
+                }} 
+            }}
         }});
         
         chartInstances['chart2'] = new Chart(getFreshCanvas('chart2'), {{ 
             type: 'pie', 
-            data: {{ labels:Object.keys(stats.cCounts), datasets:[{{ data:Object.values(stats.cCounts), backgroundColor:['#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#d946ef','#f59e0b'] }}] }}, 
-            options: commonOpts
+            data: {{ labels:Object.keys(stats.cCounts), datasets:[{{ data:Object.values(stats.cCounts), backgroundColor:['#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#d946ef','#f59e0b'], borderWidth: 1, borderColor: '#fff' }}] }}, 
+            options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, legend: {{ position: 'right' }} }}, onClick: (e, els, ch) => {{ if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => (d.clase || 'General') === ch.data.labels[els[0].index]); }} }}
         }});
 
         const sortedLocs = Object.entries(stats.loc).sort((a,b)=>b[1].total - a[1].total).slice(0, 20); 
         const labelsLoc = sortedLocs.map(x=>x[0]);
         const dataCounts = sortedLocs.map(x=>x[1].total);
-        let sumAcc = 0; const totalHallazgos = dataCounts.reduce((a,b)=>a+b, 0);
-        const dataAcumulado = dataCounts.map(count => {{ sumAcc += count; return totalHallazgos > 0 ? parseFloat(((sumAcc / totalHallazgos) * 100).toFixed(1)) : 0; }});
+        
+        const totalHallazgos = dataCounts.reduce((a,b)=>a+b, 0);
+        let sumAcc = 0;
+        const dataAcumulado = dataCounts.map(count => {{
+            sumAcc += count;
+            return totalHallazgos > 0 ? parseFloat(((sumAcc / totalHallazgos) * 100).toFixed(1)) : 0;
+        }});
 
         chartInstances['chart4'] = new Chart(getFreshCanvas('chart4'), {{
             type: 'bar',
             data: {{
                 labels: labelsLoc,
                 datasets: [
-                    {{ type: 'line', label: '% Acumulado', data: dataAcumulado, borderColor: '#ef4444', yAxisID: 'yPercentage' }},
-                    {{ type: 'bar', label: 'Cantidad de Hallazgos', data: dataCounts, backgroundColor: 'rgba(59, 130, 246, 0.7)', yAxisID: 'yCount' }}
+                    {{
+                        type: 'line', label: '% Acumulado', data: dataAcumulado,
+                        borderColor: '#ef4444', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#ef4444',
+                        pointRadius: 5, pointHoverRadius: 7, fill: false, yAxisID: 'yPercentage', tension: 0.3, zIndex: 10
+                    }},
+                    {{
+                        type: 'bar', label: 'Cantidad de Hallazgos', data: dataCounts,
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: '#2563eb', borderWidth: 1, borderRadius: 5, yAxisID: 'yCount', zIndex: 5
+                    }}
                 ]
             }},
             options: {{
-                ...commonOpts, interaction: {{ mode: 'index', intersect: false }}, 
+                ...commonOpts,
+                interaction: {{ mode: 'index', intersect: false }}, 
                 scales: {{
-                    yCount: {{ type: 'linear', position: 'left' }},
-                    yPercentage: {{ type: 'linear', position: 'right', min: 0, max: 100 }},
-                    x: {{ ticks: {{ autoSkip: false, maxRotation: 45, minRotation: 45 }} }}
+                    yCount: {{ type: 'linear', display: true, position: 'left', title: {{ display: true, text: 'Cantidad de Hallazgos', font: {{ weight: 'bold' }} }}, grid: {{ drawOnChartArea: true, color: '#e2e8f0' }}, beginAtZero: true }},
+                    yPercentage: {{ type: 'linear', display: true, position: 'right', title: {{ display: true, text: '% Acumulado', font: {{ weight: 'bold' }} }}, min: 0, max: 100, grid: {{ drawOnChartArea: false }}, ticks: {{ callback: value => value + '%' }} }},
+                    x: {{ grid: {{ display: false }}, ticks: {{ autoSkip: false, maxRotation: 45, minRotation: 45, font: {{ size: 10 }} }} }}
+                }},
+                plugins: {{
+                    ...commonOpts.plugins,
+                    legend: {{ position: 'top' }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: function(context) {{
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.dataset.yAxisID === 'yPercentage') {{ label += context.parsed.y + '%'; }} 
+                                else {{ label += context.parsed.y; }}
+                                return label;
+                            }}
+                        }}
+                    }}
+                }},
+                onClick: (e, els, ch) => {{
+                    if(els.length>0) {{
+                        const chartElement = els.find(el => el.datasetIndex === 1);
+                        if(chartElement) {{
+                            const index = chartElement.index;
+                            const label = ch.data.labels[index];
+                            showDataModal('Ubicación: ' + label, d => d.ubicacion === label);
+                        }}
+                    }}
                 }}
             }}
         }});
 
-        const scatterData = Object.entries(stats.loc).filter(([name, stat]) => stat.total > 0).map(([name, stat]) => ({{ x: stat.total, y: stat.critical, label: name }}));
+        const scatterData = Object.entries(stats.loc)
+            .filter(([name, stat]) => stat.total > 0)
+            .map(([name, stat]) => ({{ x: stat.total, y: stat.critical, label: name }}));
+            
+        const avgX = scatterData.length > 0 ? scatterData.reduce((sum, p) => sum + p.x, 0) / scatterData.length : 0;
+        const avgY = scatterData.length > 0 ? scatterData.reduce((sum, p) => sum + p.y, 0) / scatterData.length : 0;
+
         chartInstances['chart5'] = new Chart(getFreshCanvas('chart5'), {{
             type: 'scatter',
-            data: {{ datasets: [{{ label: 'Ubicaciones', data: scatterData, backgroundColor: 'rgba(239, 68, 68, 0.6)' }}] }},
-            options: {{ ...commonOpts }}
+            data: {{ datasets: [{{ label: 'Ubicaciones', data: scatterData, backgroundColor: 'rgba(239, 68, 68, 0.6)', borderColor: '#dc2626', borderWidth: 1, pointRadius: 6, pointHoverRadius: 9, pointHitRadius: 10 }}] }},
+            options: {{
+                ...commonOpts,
+                scales: {{
+                    x: {{ type: 'linear', position: 'bottom', title: {{ display: true, text: 'Frecuencia Total de Hallazgos', font: {{ weight: 'bold' }} }}, beginAtZero: true, grid: {{ color: '#e2e8f0' }} }},
+                    y: {{ type: 'linear', title: {{ display: true, text: 'Cantidad de Hallazgos Críticos (Prio 1)', font: {{ weight: 'bold' }} }}, beginAtZero: true, grid: {{ color: '#e2e8f0' }} }}
+                }},
+                plugins: {{
+                    ...commonOpts.plugins,
+                    legend: {{ display: false }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: (ctx) => {{
+                                const p = ctx.raw;
+                                return [`📍 ${{p.label}}`, `📊 Total: ${{p.x}}`, `🚨 Críticos: ${{p.y}}`];
+                            }}
+                        }}
+                    }}
+                }},
+                afterDraw: (chart) => {{
+                    if (scatterData.length === 0) return;
+                    const {{ctx, scales: {{x, y}}}} = chart;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = 'rgba(100, 116, 139, 0.5)';
+                    ctx.setLineDash([6, 6]);
+                    
+                    const pixelX = x.getPixelForValue(avgX);
+                    ctx.moveTo(pixelX, y.top);
+                    ctx.lineTo(pixelX, y.bottom);
+                    
+                    const pixelY = y.getPixelForValue(avgY);
+                    ctx.moveTo(x.left, pixelY);
+                    ctx.lineTo(x.right, pixelY);
+                    
+                    ctx.stroke();
+                    ctx.restore();
+                }}
+            }},
+            onClick: (e, els, ch) => {{
+                if(els.length>0) {{
+                    const index = els[0].index;
+                    const dataPoint = ch.data.datasets[0].data[index];
+                    showDataModal('Ubicación: ' + dataPoint.label, d => d.ubicacion === dataPoint.label);
+                }}
+            }}
         }});
     }}
 
+    // --- EFECTO ANTIGRAVEDAD (PARTÍCULAS) ---
     const initAntigravity = () => {{
         const canvas = document.createElement('canvas');
         canvas.id = 'antigravity-bg';
         document.body.prepend(canvas);
         const ctx = canvas.getContext('2d');
-        canvas.style.position = 'fixed'; canvas.style.top = '0'; canvas.style.left = '0'; canvas.style.width = '100vw'; canvas.style.height = '100vh'; canvas.style.zIndex = '-1'; canvas.style.pointerEvents = 'none'; canvas.style.backgroundColor = '#f8fafc';
-        let particles = []; const colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#A0C3FF', '#FCA297'];
+
+        canvas.style.position = 'fixed';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.width = '100vw';
+        canvas.style.height = '100vh';
+        canvas.style.zIndex = '-1'; 
+        canvas.style.pointerEvents = 'none';
+        canvas.style.backgroundColor = '#f8fafc'; // Fondo base de la app
+
+        let particles = [];
+        const colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#A0C3FF', '#FCA297'];
         let mouse = {{ x: null, y: null, radius: 120 }};
-        window.addEventListener('mousemove', (e) => {{ mouse.x = e.x; mouse.y = e.y; }});
-        window.addEventListener('mouseout', () => {{ mouse.x = undefined; mouse.y = undefined; }});
-        window.addEventListener('resize', () => {{ canvas.width = window.innerWidth; canvas.height = window.innerHeight; initParticles(); }});
+
+        window.addEventListener('mousemove', (e) => {{
+            mouse.x = e.x;
+            mouse.y = e.y;
+        }});
+
+        window.addEventListener('mouseout', () => {{
+            mouse.x = undefined;
+            mouse.y = undefined;
+        }});
+
+        window.addEventListener('resize', () => {{
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initParticles();
+        }});
+
         class Particle {{
-            constructor(x, y) {{ this.x = x; this.y = y; this.baseX = x; this.baseY = y; this.size = Math.random() * 2 + 1.5; this.color = colors[Math.floor(Math.random() * colors.length)]; this.density = (Math.random() * 20) + 2; }}
-            draw() {{ ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.closePath(); ctx.fill(); }}
+            constructor(x, y) {{
+                this.x = x;
+                this.y = y;
+                this.baseX = x;
+                this.baseY = y;
+                this.size = Math.random() * 2 + 1.5;
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+                this.density = (Math.random() * 20) + 2;
+            }}
+            draw() {{
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+            }}
             update() {{
-                let dx = mouse.x - this.x; let dy = mouse.y - this.y; let distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < mouse.radius) {{ let force = (mouse.radius - distance) / mouse.radius; this.x -= (dx / distance) * force * this.density; this.y -= (dy / distance) * force * this.density; }} 
-                else {{ if (this.x !== this.baseX) this.x -= (this.x - this.baseX) / 15; if (this.y !== this.baseY) this.y -= (this.y - this.baseY) / 15; }}
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < mouse.radius) {{
+                    let forceDirectionX = dx / distance;
+                    let forceDirectionY = dy / distance;
+                    let force = (mouse.radius - distance) / mouse.radius;
+                    let directionX = forceDirectionX * force * this.density;
+                    let directionY = forceDirectionY * force * this.density;
+                    
+                    this.x -= directionX;
+                    this.y -= directionY;
+                }} else {{
+                    if (this.x !== this.baseX) {{
+                        let dx = this.x - this.baseX;
+                        this.x -= dx / 15;
+                    }}
+                    if (this.y !== this.baseY) {{
+                        let dy = this.y - this.baseY;
+                        this.y -= dy / 15;
+                    }}
+                }}
                 this.draw();
             }}
         }}
-        function initParticles() {{ particles = []; canvas.width = window.innerWidth; canvas.height = window.innerHeight; let numberOfParticles = (canvas.width * canvas.height) / 7000; for (let i = 0; i < numberOfParticles; i++) particles.push(new Particle(Math.random() * canvas.width, Math.random() * canvas.height)); }}
-        function animateParticles() {{ ctx.clearRect(0, 0, canvas.width, canvas.height); for (let i = 0; i < particles.length; i++) particles[i].update(); requestAnimationFrame(animateParticles); }}
-        initParticles(); animateParticles();
+
+        function initParticles() {{
+            particles = [];
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            let numberOfParticles = (canvas.width * canvas.height) / 7000;
+            for (let i = 0; i < numberOfParticles; i++) {{
+                let x = Math.random() * canvas.width;
+                let y = Math.random() * canvas.height;
+                particles.push(new Particle(x, y));
+            }}
+        }}
+
+        function animateParticles() {{
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = 0; i < particles.length; i++) {{
+                particles[i].update();
+            }}
+            requestAnimationFrame(animateParticles);
+        }}
+
+        initParticles();
+        animateParticles();
     }};
 
     window.onload = () => {{
-        buildFilters(); applyFilters(); initAntigravity();
+        buildFilters();
+        applyFilters();
+        initAntigravity(); // <--- Inicia el efecto visual interactivo
     }};
     </script>
 </body></html>
