@@ -2,7 +2,8 @@ name: Actualizar Dashboard Infra
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    # Se ejecuta 1 vez al día (12:00 PM UTC = 08:00 AM en Santiago de Chile)
+    - cron: '0 11 * * *'
   workflow_dispatch:
 
 permissions:
@@ -22,9 +23,14 @@ jobs:
 
       - name: Instalar librerias necesarias
         run: |
-          pip install pandas openpyxl
+          python -m pip install --upgrade pip
+          pip install pandas openpyxl Pillow office365-rest-python-client
 
       - name: Ejecutar el script
+        env:
+          # Claves seguras de GitHub Secrets para entrar a SharePoint
+          SP_USERNAME: ${{ secrets.SP_USERNAME }}
+          SP_PASSWORD: ${{ secrets.SP_PASSWORD }}
         run: python main.py 
 
       - name: Publicar el HTML en GitHub Pages
