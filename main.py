@@ -20,8 +20,8 @@ SITE_URL = "https://teams.wal-mart.com/sites/EquipoPlanificacin"
 LIST_NAME = "Seguimiento Infraestructura"
 
 # ⚠️ SEGURIDAD GITHUB: Lee la clave desde "GitHub Secrets".
-USERNAME = os.environ.get("SP_USERNAME", "r0r0noi@cl.wal-mart.com")
-PASSWORD = os.environ.get("SP_PASSWORD", "fiXed.sPout+8")
+USERNAME = os.environ.get("SP_USERNAME")
+PASSWORD = os.environ.get("SP_PASSWORD")
 
 OUTPUT_HTML = "index.html"
 
