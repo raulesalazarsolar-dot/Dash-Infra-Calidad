@@ -281,7 +281,7 @@ def main():
             }
             
         print(f"\n   ✅ Total Actividades mapeadas: {len(db_act)}")
-        generar_html_moderno(db_act, "Actividades Infraestructura")
+        generar_html_moderno(db_act, "SubGerencia de Mantenimiento")
 
     except Exception as e: 
         print(f"\n❌ Error Fatal en script: {e}")
