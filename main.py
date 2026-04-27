@@ -480,7 +480,8 @@ def generar_html_moderno(db_json, titulo_dashboard):
                     <div class="kpi-box"><span class="k-label">PEND</span><span class="k-num k-pend" id="k_pend">0</span></div>
                 </div>
                 <div class="prog-title"><span>Cumplimiento Global</span><span id="k_perc">0%</span></div>
-                <div class="progress-bar-container"><div id="bar_fill" class="progress-bar-fill"></div></div>
+                <div class="progress-bar-container" style="margin-bottom:12px;"><div id="bar_fill" class="progress-bar-fill"></div></div>
+                <div class="prog-title"><span>⏱️ Promedio de Cierre</span><span id="k_avg_time" style="color:var(--info);">0 días</span></div>
             </div>
         </div>
 
@@ -592,6 +593,16 @@ def generar_html_moderno(db_json, titulo_dashboard):
     
     Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
     Chart.defaults.color = '#64748b';
+
+    // Función auxiliar para parsear la fecha DD-MM-YYYY a Date de Javascript
+    function parseDate(dateStr) {{
+        if (!dateStr || dateStr === '--') return null;
+        let parts = dateStr.split('-');
+        if (parts.length === 3) {{
+            return new Date(parts[2], parts[1] - 1, parts[0]);
+        }}
+        return null;
+    }}
 
     function buildFilters() {{
         const fDiv = document.getElementById('filters_dynamic');
@@ -731,8 +742,23 @@ def generar_html_moderno(db_json, titulo_dashboard):
         currentChartData = getFilteredData();
         
         let ok = 0; let pre = 0;
+        let totalDays = 0;
+        let closedCountWithDates = 0;
+
         currentChartData.forEach(d => {{ 
-            if (d.status === 'realizada' || d.status === 'cerrada') ok++; 
+            if (d.status === 'realizada' || d.status === 'cerrada') {{
+                ok++; 
+                // Calculo de tiempo de cierre
+                let dLev = parseDate(d.f_lev);
+                let dCie = parseDate(d.f_cie);
+                if (dLev && dCie) {{
+                    let diffTime = dCie.getTime() - dLev.getTime();
+                    let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays < 0) diffDays = 0;
+                    totalDays += diffDays;
+                    closedCountWithDates++;
+                }}
+            }}
             else if (d.status === 'precierre') pre++;
         }});
         const total = currentChartData.length;
@@ -749,6 +775,10 @@ def generar_html_moderno(db_json, titulo_dashboard):
         const bar = document.getElementById('bar_fill');
         bar.style.width = perc + '%';
         bar.style.backgroundColor = perc > 80 ? '#10b981' : (perc > 40 ? '#f59e0b' : '#ef4444');
+
+        // Renderizado del Promedio de Cierre
+        let avgTime = closedCountWithDates > 0 ? Math.round(totalDays / closedCountWithDates) : 0;
+        document.getElementById('k_avg_time').innerText = avgTime + (avgTime === 1 ? ' día' : ' días');
 
         if(appState.view === 'list') renderList(currentChartData);
         else drawCharts(currentChartData);
