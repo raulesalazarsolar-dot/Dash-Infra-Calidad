@@ -804,9 +804,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
         else {{ stBadge.innerText = '⚠️ PENDIENTE'; stBadge.className = 'tag st-pend'; }}
         
         let pl = d.prioridad;
-        if(pl==='1') pl='<span class="prio-flag p-crit">🚨 CRÍTICA</span>';
-        else if(pl==='2') pl='<span class="prio-flag p-med">🟡 MAYOR</span>';
-        else pl='<span class="prio-flag p-baja">🟢 MENOR</span>';
+        if(pl==='1') pl='<span class="prio-flag p-crit">🚨 Crítica</span>';
+        else if(pl==='2') pl='<span class="prio-flag p-med">🟡 Mayor</span>';
+        else pl='<span class="prio-flag p-baja">🟢 Menor</span>';
         document.getElementById('d_prio_lbl').innerHTML = pl;
 
         if (d.clase && d.clase.toLowerCase().includes('calidad')) {{
@@ -922,9 +922,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
                 let stColor = (d.status==='realizada' || d.status==='cerrada') ? '#166534' : (d.status==='pendiente' || d.status==='abierta' ? '#991b1b' : '#92400e');
                 let idDisplay = d.ot ? d.ot : (d.tag ? d.tag : '#' + d.id_real);
                 
-                let pText = 'MENOR'; let pColor = '#64748b';
-                if(d.prioridad==='1') {{ pText='🚨 CRÍTICA'; pColor='#dc2626'; }}
-                else if(d.prioridad==='2') {{ pText='🟡 MAYOR'; pColor='#d97706'; }}
+                let pText = '🟢 Menor'; let pColor = '#64748b';
+                if(d.prioridad==='1') {{ pText='🚨 Crítica'; pColor='#dc2626'; }}
+                else if(d.prioridad==='2') {{ pText='🟡 Mayor'; pColor='#d97706'; }}
 
                 html += `<tr onclick="document.getElementById('data_modal').style.display='none'; document.getElementById('btn_tab_list').click(); setTimeout(() => renderDetail('${{d.key_id}}'), 100);">
                     <td style="font-weight:700;">${{idDisplay}}</td>
