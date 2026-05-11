@@ -168,7 +168,6 @@ def main():
         
         print("   ⏳ Solicitando registros y adjuntos...")
         
-        # Mapeo actualizado: Se reemplazó ClaseM por field_12
         columnas_req = [
             "ID", "Title", "LinkTitle", "field_1", "field_2", "field_3", 
             "field_4", "field_5", "field_6", "field_7", "field_8", 
@@ -191,17 +190,13 @@ def main():
             p = item.properties
             item_id = int(p.get("ID", 0))
             
-            # --- MAPEO EXACTO A NOMBRES INTERNOS ---
             clase_str = limpiar(p.get("field_12")).title() or "General"
             
-            # --- FILTRO DE CLASES ---
             clase_norm = normalizar_texto(clase_str)
             if not any(x in clase_norm for x in ["calidad", "sanitizacion", "infraestructura"]):
                 continue 
-            # -----------------------------------
 
             tag_id = limpiar(p.get("LinkTitle"))
-            # Fallback por si en semanas antiguas field_1 venía vacío
             semana = limpiar(p.get("field_1")) or "S/N"
             f_lev = formatear_fecha(p.get("field_2"))
             f_cie = formatear_fecha(p.get("field_3"))
@@ -220,23 +215,28 @@ def main():
             obs2 = limpiar(p.get("field_15"))
             
             # ==============================================================
-            # LÓGICA DE ESTADOS Y CIERRE (OPCIÓN 1: COINCIDENCIA EXACTA)
+            # LÓGICA DE ESTADOS ACTUALIZADA: PRECIERRE VS RECHAZOS
             # ==============================================================
             has_asignacion = bool(ejecutor and ejecutor.strip() and ejecutor.lower() != "sin asignar" and ejecutor != "0")
             
-            # Diccionarios de palabras exactas permitidas para evitar falsos positivos
             estados_exito_ejecucion = ['ok', 'listo', 'lista', 'cerrado', 'cerrada', 'realizado', 'realizada', 'completado', 'completada']
             estados_exito_cierre = ['cerrado', 'cerrada', 'ok', 'completado', 'completada']
+            estados_abierto = ['abierto', 'abierta']
+            estados_en_proceso = ['en proceso', 'proceso', 'tratando']
 
             has_ejecutado = status_raw in estados_exito_ejecucion
             has_cierre = estado_txt in estados_exito_cierre
+            is_abierto = estado_txt in estados_abierto
+            is_proceso = estado_txt in estados_en_proceso
             is_calidad = "calidad" in clase_str.lower()
 
             if is_calidad:
                 if has_cierre: 
                     status = "realizada"
-                elif has_ejecutado: 
-                    status = "precierre"
+                elif has_ejecutado and is_abierto: 
+                    status = "precierre"  # Ejecutado + Abierto
+                elif has_ejecutado and is_proceso:
+                    status = "rechazo"    # Ejecutado + En Proceso
                 else: 
                     status = "pendiente"
             else:
@@ -256,7 +256,6 @@ def main():
             else:
                 prio = "3"
 
-            # Extracción de fotos (lista de base64)
             imgs_antes = extraer_fotos_columna(ctx, p, "Antes", item_id)
             imgs_despues = extraer_fotos_columna(ctx, p, "Despues", item_id)
 
@@ -312,7 +311,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
     if b64_excel:
         download_btn = f'<div id="btn_dl_container"><a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_excel}" download="Base_Calidad.xlsx" class="seg-btn" style="text-decoration:none; display:flex; align-items:center; background:#dcfce7; color:#166534; border:1px solid #166534; border-radius:4px; padding:4px 12px; font-weight:bold; font-size:0.85rem;">📥 Descargar Calidad</a></div>'
 
-    # Pasamos el JSON seguro
     json_seguro = json.dumps(db_json).replace("</", "<\\/")
 
     full_html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Dashboard - {titulo_dashboard}</title>
@@ -324,7 +322,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         :root {{ --primary: #0f172a; --secondary: #334155; --accent: #2563eb; --bg: #f8fafc; --border: #e2e8f0; --text: #1e293b; --muted: #64748b; --success: #10b981; --warn: #f59e0b; --danger: #ef4444; --info: #3b82f6; }}
         * {{ box-sizing: border-box; outline: none; font-family: 'Segoe UI', system-ui, sans-serif; }}
         
-        /* Fondo transparente para que se vean las partículas detrás */
         body {{ background: transparent; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }}
         
         .top-bar {{ background: var(--primary); color: white; padding: 0 20px; height: 60px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
@@ -338,8 +335,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         
         .app-layout {{ display: flex; height: calc(100vh - 110px); width: 100%; overflow: hidden; }}
         
-        /* Listas y Filtros sólidos para fácil lectura */
-        .col-filters {{ width: 280px; background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; z-index: 5; }}
+        .col-filters {{ width: 290px; background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; z-index: 5; }}
         .filters-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 700; color: var(--primary); font-size: 0.9rem; text-transform: uppercase; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; }}
         .filters-body {{ flex: 1; overflow-y: auto; padding: 20px; min-height: 0; }} 
         .filters-footer {{ padding: 20px; border-top: 1px solid var(--border); background: #f8fafc; flex-shrink: 0; }}
@@ -348,11 +344,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .list-header {{ padding: 20px; border-bottom: 1px solid var(--border); font-weight: 600; background: #f8fafc; color: var(--secondary); font-size: 0.9rem; flex-shrink: 0; display:flex; flex-direction:column; gap:12px; }}
         .list-scroll-area {{ flex: 1; overflow-y: auto; min-height: 0; }}
         
-        /* Contenedores transparentes para mostrar el canvas (efecto de partículas) */
         .col-detail {{ flex: 1; background: transparent; overflow-y: auto; padding: 40px; }}
         .graficos-layout {{ flex: 1; padding: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px; overflow-y: auto; background: transparent; align-content:start; }}
         
-        /* Las tarjetas de contenido se mantienen blancas para legibilidad */
         .detail-content {{ background: white; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); overflow: hidden; max-width: 1000px; margin: 0 auto; border: 1px solid var(--border); }}
         .chart-card {{ background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); display: flex; flex-direction: column; height: 400px; width: 100%; }}
         .chart-card.wide {{ grid-column: 1 / -1; height: 480px; }}
@@ -364,9 +358,16 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .btn-clean {{ background: white; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: 0.2s; margin-top: 10px; width: 100%; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; }}
         .btn-clean:hover {{ background: var(--danger); color: white; }}
 
-        .kpi-row-mini {{ display: flex; justify-content: space-between; margin-bottom: 15px; }}
-        .kpi-box {{ text-align: center; }} .k-label {{ display: block; font-size: 0.7rem; color: var(--muted); font-weight: 700; }}
-        .k-num {{ display: block; font-size: 1.3rem; font-weight: 800; color: var(--primary); }} .k-ok {{ color: var(--success); }} .k-pend {{ color: var(--danger); }}
+        /* --- NUEVO GRID DE INDICADORES MODERNOS --- */
+        .kpi-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }}
+        .kpi-card {{ background: white; border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: transform 0.2s; }}
+        .kpi-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.06); }}
+        .kpi-card.full {{ grid-column: span 2; background: #eff6ff; border-color: #bfdbfe; border-bottom: 3px solid var(--info); }}
+        .k-label {{ font-size: 0.65rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; text-align: center; }}
+        .k-num {{ font-size: 1.4rem; font-weight: 800; color: var(--primary); line-height: 1; }}
+        .k-ok {{ color: var(--success); }} .k-pend {{ color: var(--danger); }} .k-pre {{ color: var(--warn); }} .k-rec {{ color: #db2777; }}
+        /* ------------------------------------------- */
+
         .prog-title {{ display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }}
         .progress-bar-container {{ width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }}
         .progress-bar-fill {{ height: 100%; background: var(--success); width: 0%; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }}
@@ -377,19 +378,16 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .li-title {{ font-weight: 700; font-size: 0.95rem; color: var(--primary); margin-bottom: 10px; line-height: 1.4; }}
         .li-btm {{ display: flex; justify-content: space-between; font-size: 0.75rem; align-items: center; }}
         
-        .tag {{ padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.3px; }}
+        .tag {{ padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.3px; display: inline-block; }}
         .st-ok {{ background: #dcfce7; color: #166534; }} .st-pend {{ background: #fee2e2; color: #991b1b; }} .st-prog {{ background: #e0f2fe; color: #075985; }} .st-proc {{ background: #fef3c7; color: #92400e; }}
+        .st-rec {{ background: #fce7f3; color: #be185d; border: 1px solid #fbcfe8; }} /* Badge de Rechazos */
         
         .empty-state {{ display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); opacity: 0.7; }}
         .detail-header {{ padding: 30px; border-bottom: 1px solid var(--border); background: #fff; }}
         .dh-top {{ display: flex; justify-content: space-between; margin-bottom: 15px; align-items:center; }}
         .detail-header h2 {{ margin: 0 0 5px 0; font-size: 1.6rem; color: var(--primary); }}
         
-        @keyframes pulse-ring {{
-            0% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
-            70% {{ box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }}
-            100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }}
-        }}
+        @keyframes pulse-ring {{ 0% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }} 70% {{ box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }} 100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }} }}
         .ticket-step-container {{ display: flex; justify-content: space-between; position: relative; width: 100%; max-width: 700px; margin: 0 auto; padding: 25px 0; }}
         .ticket-step-bg {{ position: absolute; top: 40px; left: 10%; right: 10%; height: 4px; background: #e2e8f0; z-index: 1; border-radius: 2px; }}
         .ticket-step-fill {{ position: absolute; top: 40px; left: 10%; height: 4px; background: var(--success); z-index: 2; transition: width 0.6s ease; border-radius: 2px; }}
@@ -423,7 +421,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .chart-title {{ font-size: 1rem; font-weight: 700; color: var(--secondary); margin-bottom: 15px; text-transform: uppercase; text-align: center; letter-spacing: 0.5px; }}
         .canvas-container {{ position: relative; flex: 1 1 auto; width: 100%; min-height: 0; }}
         
-        .prio-flag {{ padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.75rem; }}
+        .prio-flag {{ padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.75rem; display:inline-block; }}
         .p-crit {{ background: #fee2e2; color: #dc2626; border: 1px solid #f87171; }}
         .p-alta {{ background: #ffedd5; color: #ea580c; border: 1px solid #fdba74; }}
         .p-med {{ background: #fef3c7; color: #d97706; border: 1px solid #fcd34d; }}
@@ -464,6 +462,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
             <button class="tab-btn active" onclick="setTab('all', this)" id="btn_tab_list">General</button>
             <button class="tab-btn" onclick="setTab('pendiente', this)">Pendientes</button>
             <button class="tab-btn" onclick="setTab('precierre', this)">Precierre</button>
+            <button class="tab-btn" onclick="setTab('rechazo', this)">Rechazos</button>
             <button class="tab-btn" onclick="setTab('realizada', this)">Realizadas</button>
             <button class="tab-btn" onclick="setView('charts', this)">📊 Gráficos</button>
         </div>
@@ -479,13 +478,17 @@ def generar_html_moderno(db_json, titulo_dashboard):
             </div>
             
             <div class="filters-body" id="filters_dynamic"></div>
+            
             <div class="filters-footer">
-                <div class="kpi-row-mini">
-                    <div class="kpi-box"><span class="k-label">TOTAL</span><span class="k-num" id="k_total">0</span></div>
-                    <div class="kpi-box"><span class="k-label">CERRADAS</span><span class="k-num k-ok" id="k_ok">0</span></div>
-                    <div class="kpi-box"><span class="k-label">PRECIERRE</span><span class="k-num" style="color:#f59e0b" id="k_pre">0</span></div>
-                    <div class="kpi-box"><span class="k-label">PEND</span><span class="k-num k-pend" id="k_pend">0</span></div>
+                <!-- Tarjetas Modernas de KPI -->
+                <div class="kpi-grid">
+                    <div class="kpi-card full"><span class="k-label">📊 TOTAL REGISTROS</span><span class="k-num" id="k_total">0</span></div>
+                    <div class="kpi-card" style="border-bottom: 3px solid var(--success);"><span class="k-label">✅ CERRADAS</span><span class="k-num k-ok" id="k_ok">0</span></div>
+                    <div class="kpi-card" style="border-bottom: 3px solid var(--danger);"><span class="k-label">📂 PENDIENTES</span><span class="k-num k-pend" id="k_pend">0</span></div>
+                    <div class="kpi-card" style="border-bottom: 3px solid var(--warn);"><span class="k-label">🔍 PRECIERRE</span><span class="k-num k-pre" id="k_pre">0</span></div>
+                    <div class="kpi-card" style="border-bottom: 3px solid #db2777;"><span class="k-label">❌ RECHAZOS</span><span class="k-num k-rec" id="k_rec">0</span></div>
                 </div>
+                
                 <div class="prog-title"><span>Cumplimiento Global</span><span id="k_perc">0%</span></div>
                 <div class="progress-bar-container" style="margin-bottom:12px;"><div id="bar_fill" class="progress-bar-fill"></div></div>
                 <div class="prog-title"><span>⏱️ Promedio de Cierre</span><span id="k_avg_time" style="color:var(--info);">0 días</span></div>
@@ -568,7 +571,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
     const records = Object.values(db).sort((a,b) => b.id_real - a.id_real);
     const weeks = [...new Set(records.map(x=>x.semana).filter(x=>x!=="S/N"))].sort((a,b)=>{{ let na=parseInt(a), nb=parseInt(b); return (isNaN(na)||isNaN(nb)) ? a.localeCompare(b) : na-nb; }});
     
-    // NOMBRES MESES - LÓGICA DE AGRUPACIÓN POR AÑO
+    // NOMBRES MESES
     const nombresMeses = {{ '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre' }};
     
     let uniqueTimeCats = new Map();
@@ -589,7 +592,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         }}
     }});
     
-    // Ordenamos cronológicamente usando las keys y extraemos los valores limpios
     const sortedKeys = Array.from(uniqueTimeCats.keys()).sort();
     const months = sortedKeys.map(k => uniqueTimeCats.get(k));
     
@@ -601,7 +603,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
     Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
     Chart.defaults.color = '#64748b';
 
-    // Función auxiliar para parsear la fecha DD-MM-YYYY a Date de Javascript
     function parseDate(dateStr) {{
         if (!dateStr || dateStr === '--') return null;
         let parts = dateStr.split('-');
@@ -748,14 +749,13 @@ def generar_html_moderno(db_json, titulo_dashboard):
     function applyFilters() {{
         currentChartData = getFilteredData();
         
-        let ok = 0; let pre = 0;
+        let ok = 0; let pre = 0; let rec = 0;
         let totalDays = 0;
         let closedCountWithDates = 0;
 
         currentChartData.forEach(d => {{ 
             if (d.status === 'realizada' || d.status === 'cerrada') {{
                 ok++; 
-                // Calculo de tiempo de cierre
                 let dLev = parseDate(d.f_lev);
                 let dCie = parseDate(d.f_cie);
                 if (dLev && dCie) {{
@@ -767,14 +767,16 @@ def generar_html_moderno(db_json, titulo_dashboard):
                 }}
             }}
             else if (d.status === 'precierre') pre++;
+            else if (d.status === 'rechazo') rec++;
         }});
-        const total = currentChartData.length;
         
+        const total = currentChartData.length;
         document.getElementById('k_total').innerText = total;
         document.getElementById('k_ok').innerText = ok;
         if(document.getElementById('k_pre')) document.getElementById('k_pre').innerText = pre;
+        if(document.getElementById('k_rec')) document.getElementById('k_rec').innerText = rec;
         
-        let pendCount = total - ok - pre;
+        let pendCount = total - ok - pre - rec;
         document.getElementById('k_pend').innerText = pendCount;
         
         let perc = total > 0 ? Math.round((ok/total)*100) : 0;
@@ -783,7 +785,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         bar.style.width = perc + '%';
         bar.style.backgroundColor = perc > 80 ? '#10b981' : (perc > 40 ? '#f59e0b' : '#ef4444');
 
-        // Renderizado del Promedio de Cierre
         let avgTime = closedCountWithDates > 0 ? Math.round(totalDays / closedCountWithDates) : 0;
         document.getElementById('k_avg_time').innerText = avgTime + (avgTime === 1 ? ' día' : ' días');
 
@@ -807,6 +808,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
             let stText = '⚠️ PEND'; let stClass = 'st-pend';
             if (d.status === 'realizada' || d.status === 'cerrada') {{ stText='✅ REALIZADA'; stClass='st-ok'; }}
             else if (d.status === 'precierre') {{ stText='🔍 PRECIERRE'; stClass='st-proc'; }}
+            else if (d.status === 'rechazo') {{ stText='❌ RECHAZO'; stClass='st-rec'; }}
             else if (d.status === 'programado') {{ stText='📅 PROG'; stClass='st-prog'; }}
             else if (d.status === 'en proceso' || d.status === 'tratando') {{ stText='🔨 PROCESO'; stClass='st-proc'; }}
             else {{ stText='📂 PEND'; stClass='st-pend'; }}
@@ -836,6 +838,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         const stBadge = document.getElementById('d_status');
         if (d.status === 'realizada' || d.status === 'cerrada') {{ stBadge.innerText = '✅ REALIZADA'; stBadge.className = 'tag st-ok'; }}
         else if (d.status === 'precierre') {{ stBadge.innerText = '🔍 PRECIERRE'; stBadge.className = 'tag st-proc'; }}
+        else if (d.status === 'rechazo') {{ stBadge.innerText = '❌ RECHAZO'; stBadge.className = 'tag st-rec'; }}
         else if (d.status === 'programado') {{ stBadge.innerText = '📅 PROGRAMADA'; stBadge.className = 'tag st-prog'; }}
         else if (d.status === 'en proceso' || d.status === 'tratando') {{ stBadge.innerText = '🔨 EN PROCESO'; stBadge.className = 'tag st-proc'; }}
         else {{ stBadge.innerText = '⚠️ PENDIENTE'; stBadge.className = 'tag st-pend'; }}
@@ -956,7 +959,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         currentChartData.forEach(d => {{
             if (filterFn(d)) {{
                 found = true;
-                let stColor = (d.status==='realizada' || d.status==='cerrada') ? '#166534' : (d.status==='pendiente' || d.status==='abierta' ? '#991b1b' : '#92400e');
+                let stColor = (d.status==='realizada' || d.status==='cerrada') ? '#166534' : (d.status==='pendiente' || d.status==='abierta' ? '#991b1b' : (d.status==='rechazo' ? '#be185d' : '#92400e'));
                 let idDisplay = d.ot ? d.ot : (d.tag ? d.tag : '#' + d.id_real);
                 
                 let pText = '🟢 Menor'; let pColor = '#64748b';
@@ -996,13 +999,16 @@ def generar_html_moderno(db_json, titulo_dashboard):
             if (chartInstances[id]) {{ chartInstances[id].destroy(); chartInstances[id] = null; }}
         }});
 
-        let stats = {{ ok:0, pend:0, pre:0, prog:0, loc:{{}}, wCounts:{{}}, cCounts:{{}}, mCounts:{{}} }};
+        let stats = {{ ok:0, pend:0, pre:0, rec:0, prog:0, loc:{{}}, wCounts:{{}}, cCounts:{{}}, mCounts:{{}} }};
         
         data.forEach(d => {{
             let isOk = (d.status === 'realizada' || d.status === 'cerrada');
             let isPre = (d.status === 'precierre');
+            let isRec = (d.status === 'rechazo');
+            
             if(isOk) stats.ok++; 
             else if(isPre) stats.pre++;
+            else if(isRec) stats.rec++;
             else stats.pend++;
             
             let miClase = d.clase || 'General';
@@ -1036,11 +1042,12 @@ def generar_html_moderno(db_json, titulo_dashboard):
             
             if (catMensual) {{
                 if (!stats.mCounts[catMensual]) {{
-                    stats.mCounts[catMensual] = {{ total:0, ok:0, pre:0, sortKey: sortKey }};
+                    stats.mCounts[catMensual] = {{ total:0, ok:0, pre:0, rec:0, sortKey: sortKey }};
                 }}
                 stats.mCounts[catMensual].total++;
                 if(isOk) stats.mCounts[catMensual].ok++;
                 if(isPre) stats.mCounts[catMensual].pre++;
+                if(isRec) stats.mCounts[catMensual].rec++;
             }}
         }});
 
@@ -1054,6 +1061,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         const c6DataLevantadas = finalLabelsMeses.map(m => stats.mCounts[m].total);
         const c6DataCerradas = finalLabelsMeses.map(m => stats.mCounts[m].ok);
         const c6DataPrecierre = finalLabelsMeses.map(m => stats.mCounts[m].pre);
+        const c6DataRechazos = finalLabelsMeses.map(m => stats.mCounts[m].rec);
 
         let c6Datasets = [
             {{
@@ -1065,6 +1073,11 @@ def generar_html_moderno(db_json, titulo_dashboard):
                 label: 'Precierre', data: c6DataPrecierre,
                 borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.2)',
                 borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#fff', pointBorderColor: '#f59e0b', pointRadius: 4
+            }},
+            {{
+                label: 'Rechazos', data: c6DataRechazos,
+                borderColor: '#db2777', backgroundColor: 'rgba(219, 39, 119, 0.2)',
+                borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#fff', pointBorderColor: '#db2777', pointRadius: 4
             }},
             {{
                 label: 'Cerradas', data: c6DataCerradas,
@@ -1093,9 +1106,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
             }}
         }});
 
-        let cLabels = ['Cerradas','Precierre','Pendientes'];
-        let cDataDoughnut = [stats.ok, stats.pre, stats.pend];
-        let cBg = ['#10b981','#f59e0b','#ef4444'];
+        let cLabels = ['Cerradas', 'Precierre', 'Rechazos', 'Pendientes'];
+        let cDataDoughnut = [stats.ok, stats.pre, stats.rec, stats.pend];
+        let cBg = ['#10b981', '#f59e0b', '#db2777', '#ef4444'];
 
         chartInstances['chart1'] = new Chart(getFreshCanvas('chart1'), {{ 
             type: 'doughnut', 
@@ -1114,6 +1127,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
                             let st = ch.data.labels[els[0].index]; 
                             if(st==='Cerradas') return d.status==='realizada' || d.status==='cerrada'; 
                             if(st==='Precierre') return d.status==='precierre';
+                            if(st==='Rechazos') return d.status==='rechazo';
                             if(st==='Pendientes') return d.status==='pendiente' || d.status==='abierta'; 
                             return d.status==='programado' || d.status==='tratando'; 
                         }}); 
