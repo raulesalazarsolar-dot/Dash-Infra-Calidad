@@ -219,10 +219,17 @@ def main():
             obs1 = limpiar(p.get("field_14"))
             obs2 = limpiar(p.get("field_15"))
             
-            # Lógica de estados 
+            # ==============================================================
+            # LÓGICA DE ESTADOS Y CIERRE (OPCIÓN 1: COINCIDENCIA EXACTA)
+            # ==============================================================
             has_asignacion = bool(ejecutor and ejecutor.strip() and ejecutor.lower() != "sin asignar" and ejecutor != "0")
-            has_ejecutado = any(k in status_raw for k in ['ok', 'listo', 'cerrad', 'realiza', 'complet'])
-            has_cierre = any(k in estado_txt for k in ['cerrad', 'ok', 'complet'])
+            
+            # Diccionarios de palabras exactas permitidas para evitar falsos positivos
+            estados_exito_ejecucion = ['ok', 'listo', 'lista', 'cerrado', 'cerrada', 'realizado', 'realizada', 'completado', 'completada']
+            estados_exito_cierre = ['cerrado', 'cerrada', 'ok', 'completado', 'completada']
+
+            has_ejecutado = status_raw in estados_exito_ejecucion
+            has_cierre = estado_txt in estados_exito_cierre
             is_calidad = "calidad" in clase_str.lower()
 
             if is_calidad:
