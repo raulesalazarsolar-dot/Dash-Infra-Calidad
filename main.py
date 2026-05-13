@@ -309,7 +309,8 @@ def generar_html_moderno(db_json, titulo_dashboard):
     download_btn = ""
     b64_excel = generar_excel_calidad_b64(db_json)
     if b64_excel:
-        download_btn = f'<div id="btn_dl_container"><a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_excel}" download="Base_Calidad.xlsx" class="seg-btn" style="text-decoration:none; display:flex; align-items:center; background:#dcfce7; color:#166534; border:1px solid #166534; border-radius:4px; padding:4px 12px; font-weight:bold; font-size:0.85rem;">📥 Descargar Calidad</a></div>'
+        # Se ha ajustado ligeramente el padding y margen del botón para encajar perfecto en la barra de pestañas
+        download_btn = f'<div id="btn_dl_container"><a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_excel}" download="Base_Calidad.xlsx" class="seg-btn" style="text-decoration:none; display:flex; align-items:center; background:#dcfce7; color:#166534; border:1px solid #166534; border-radius:4px; padding:6px 12px; font-weight:bold; font-size:0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">📥 Descargar Calidad</a></div>'
 
     json_seguro = json.dumps(db_json).replace("</", "<\\/")
 
@@ -324,6 +325,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         
         body {{ background: transparent; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }}
         
+        /* Modificación: Alineación vertical para el logo en top-bar */
         .top-bar {{ background: var(--primary); color: white; padding: 0 20px; height: 60px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
         .brand h2 {{ margin: 0; font-size: 1.2rem; display:flex; align-items:center; gap: 8px; }} 
         .brand span {{ opacity: 0.7; font-weight: 300; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; }}
@@ -358,7 +360,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .btn-clean {{ background: white; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: 0.2s; margin-top: 10px; width: 100%; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; }}
         .btn-clean:hover {{ background: var(--danger); color: white; }}
 
-        /* --- NUEVO GRID DE INDICADORES MODERNOS --- */
         .kpi-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }}
         .kpi-card {{ background: white; border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: transform 0.2s; }}
         .kpi-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.06); }}
@@ -366,7 +367,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .k-label {{ font-size: 0.65rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; text-align: center; }}
         .k-num {{ font-size: 1.4rem; font-weight: 800; color: var(--primary); line-height: 1; }}
         .k-ok {{ color: var(--success); }} .k-pend {{ color: var(--danger); }} .k-pre {{ color: var(--warn); }} .k-rec {{ color: #db2777; }}
-        /* ------------------------------------------- */
 
         .prog-title {{ display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }}
         .progress-bar-container {{ width: 100%; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }}
@@ -380,7 +380,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         
         .tag {{ padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.3px; display: inline-block; }}
         .st-ok {{ background: #dcfce7; color: #166534; }} .st-pend {{ background: #fee2e2; color: #991b1b; }} .st-prog {{ background: #e0f2fe; color: #075985; }} .st-proc {{ background: #fef3c7; color: #92400e; }}
-        .st-rec {{ background: #fce7f3; color: #be185d; border: 1px solid #fbcfe8; }} /* Badge de Rechazos */
+        .st-rec {{ background: #fce7f3; color: #be185d; border: 1px solid #fbcfe8; }}
         
         .empty-state {{ display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); opacity: 0.7; }}
         .detail-header {{ padding: 30px; border-bottom: 1px solid var(--border); background: #fff; }}
@@ -451,9 +451,8 @@ def generar_html_moderno(db_json, titulo_dashboard):
 
     <div class="top-bar">
         <div class="brand"><h2>🏭 Seguimiento de actividades <span>{titulo_dashboard}</span></h2></div>
-        <div style="font-size:0.85rem; font-weight:600; opacity:0.9; display:flex; gap:15px; align-items:center;">
-            {download_btn}
-            <span>Actualizado: {fecha_actual}</span>
+        <div style="display:flex; align-items:center;">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Walmart_logo_%282008%29.svg" alt="Walmart Logo" style="height: 28px; filter: brightness(0) invert(1); opacity: 0.95;">
         </div>
     </div>
     
@@ -465,6 +464,9 @@ def generar_html_moderno(db_json, titulo_dashboard):
             <button class="tab-btn" onclick="setTab('rechazo', this)">Rechazos</button>
             <button class="tab-btn" onclick="setTab('realizada', this)">Realizadas</button>
             <button class="tab-btn" onclick="setView('charts', this)">📊 Gráficos</button>
+        </div>
+        <div style="display:flex; align-items:center; padding: 5px 0;">
+            {download_btn}
         </div>
     </div>
     
@@ -480,7 +482,10 @@ def generar_html_moderno(db_json, titulo_dashboard):
             <div class="filters-body" id="filters_dynamic"></div>
             
             <div class="filters-footer">
-                <!-- Tarjetas Modernas de KPI -->
+                <div style="font-size: 0.8rem; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 12px; background: #f1f5f9; padding: 6px; border-radius: 6px; border: 1px solid var(--border);">
+                    🕒 Actualizado: {fecha_actual}
+                </div>
+                
                 <div class="kpi-grid">
                     <div class="kpi-card full"><span class="k-label">📊 TOTAL REGISTROS</span><span class="k-num" id="k_total">0</span></div>
                     <div class="kpi-card" style="border-bottom: 3px solid var(--success);"><span class="k-label">✅ CERRADAS</span><span class="k-num k-ok" id="k_ok">0</span></div>
@@ -1380,6 +1385,3 @@ def generar_html_moderno(db_json, titulo_dashboard):
     
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f: f.write(full_html)
     print(f"✅ REPORTE {titulo_dashboard} GUARDADO CON ÉXITO")
-
-if __name__ == "__main__":
-    main()
