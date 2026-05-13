@@ -2,6 +2,7 @@ import io
 import base64
 import json
 import os
+import sys
 import unicodedata
 import pandas as pd
 from urllib.parse import urlparse, unquote
@@ -293,6 +294,7 @@ def main():
         print(f"\n❌ Error Fatal en script: {e}")
         import traceback
         traceback.print_exc()
+        sys.exit(1) # OBLIGA A GITHUB A MARCAR ERROR EN ROJO SI ALGO FALLA
 
 # ==========================================
 # 5. GENERADOR HTML
@@ -309,7 +311,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
     download_btn = ""
     b64_excel = generar_excel_calidad_b64(db_json)
     if b64_excel:
-        # Se ha ajustado ligeramente el padding y margen del botón para encajar perfecto en la barra de pestañas
         download_btn = f'<div id="btn_dl_container"><a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_excel}" download="Base_Calidad.xlsx" class="seg-btn" style="text-decoration:none; display:flex; align-items:center; background:#dcfce7; color:#166534; border:1px solid #166534; border-radius:4px; padding:6px 12px; font-weight:bold; font-size:0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">📥 Descargar Calidad</a></div>'
 
     json_seguro = json.dumps(db_json).replace("</", "<\\/")
@@ -325,7 +326,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
         
         body {{ background: transparent; color: var(--text); margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }}
         
-        /* Modificación: Alineación vertical para el logo en top-bar */
         .top-bar {{ background: var(--primary); color: white; padding: 0 20px; height: 60px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
         .brand h2 {{ margin: 0; font-size: 1.2rem; display:flex; align-items:center; gap: 8px; }} 
         .brand span {{ opacity: 0.7; font-weight: 300; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; }}
@@ -1385,3 +1385,6 @@ def generar_html_moderno(db_json, titulo_dashboard):
     
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f: f.write(full_html)
     print(f"✅ REPORTE {titulo_dashboard} GUARDADO CON ÉXITO")
+
+if __name__ == "__main__":
+    main()
