@@ -23,7 +23,7 @@ LIST_NAME = "Seguimiento Infraestructura"
 # ⚠️ SEGURIDAD GITHUB: Lee la clave desde "GitHub Secrets". 
 # Si no la encuentra (en local), usa la por defecto.
 USERNAME = os.environ.get("SP_USERNAME", "r0r0noi@cl.wal-mart.com")
-PASSWORD = os.environ.get("SP_PASSWORD", "fiXed.sPout+8")
+PASSWORD = os.environ.get("SP_PASSWORD", "dEbit.spLiT+9")
 
 # Archivo de salida para GitHub Pages
 OUTPUT_HTML = "index.html"
