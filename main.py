@@ -387,7 +387,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         .dh-top {{ display: flex; justify-content: space-between; margin-bottom: 15px; align-items:center; }}
         .detail-header h2 {{ margin: 0 0 5px 0; font-size: 1.6rem; color: var(--primary); }}
         
-        @keyframes pulse-ring {{ 0% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }} 70% {{ box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }} 100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }} }}
+        @pragma pulse-ring {{ 0% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }} 70% {{ box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }} 100% {{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }} }}
         .ticket-step-container {{ display: flex; justify-content: space-between; position: relative; width: 100%; max-width: 700px; margin: 0 auto; padding: 25px 0; }}
         .ticket-step-bg {{ position: absolute; top: 40px; left: 10%; right: 10%; height: 4px; background: #e2e8f0; z-index: 1; border-radius: 2px; }}
         .ticket-step-fill {{ position: absolute; top: 40px; left: 10%; height: 4px; background: var(--success); z-index: 2; transition: width 0.6s ease; border-radius: 2px; }}
@@ -452,7 +452,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
     <div class="top-bar">
         <div class="brand"><h2>🏭 Seguimiento de actividades <span>{titulo_dashboard}</span></h2></div>
         <div style="display:flex; align-items:center;">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Walmart_logo_%282008%29.svg" alt="Walmart Logo" style="height: 28px; filter: brightness(0) invert(1); opacity: 0.95;">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Walmart_logo_%282008%29.svg" alt="Walmart Logo" style="height: 28px; filter: brightness(0) invert(1); opacity: 0.95; cursor: pointer;" ondblclick="descargarDashboard()" title="Doble clic para descargar este Dashboard HTML">
         </div>
     </div>
     
@@ -573,6 +573,21 @@ def generar_html_moderno(db_json, titulo_dashboard):
     }}
 
     const db = {json_seguro};
+
+    // --- FUNCIÓN PARA AUTO-DESCARGAR EL ARCHIVO HTML ---
+    window.descargarDashboard = function() {{
+        const htmlContent = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+        const blob = new Blob([htmlContent], {{ type: 'text/html;charset=utf-8' }});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "{titulo_dashboard}".replace(/\\s+/g, "_") + ".html";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }};
+
     const records = Object.values(db).sort((a,b) => b.id_real - a.id_real);
     const weeks = [...new Set(records.map(x=>x.semana).filter(x=>x!=="S/N"))].sort((a,b)=>{{ let na=parseInt(a), nb=parseInt(b); return (isNaN(na)||isNaN(nb)) ? a.localeCompare(b) : na-nb; }});
     
@@ -1163,15 +1178,15 @@ def generar_html_moderno(db_json, titulo_dashboard):
             data: {{
                 labels: labelsLoc,
                 datasets: [
-                    {{
-                        type: 'line', label: '% Acumulado', data: dataAcumulado,
-                        borderColor: '#ef4444', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#ef4444',
-                        pointRadius: 5, pointHoverRadius: 7, fill: false, yAxisID: 'yPercentage', tension: 0.3, zIndex: 10
-                    }},
-                    {{
-                        type: 'bar', label: 'Cantidad de Hallazgos', data: dataCounts,
-                        backgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: '#2563eb', borderWidth: 1, borderRadius: 5, yAxisID: 'yCount', zIndex: 5
-                    }}
+                    \t{{
+                        \ttype: 'line', label: '% Acumulado', data: dataAcumulado,
+                        \tborderColor: '#ef4444', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#ef4444',
+                        \tpointRadius: 5, pointHoverRadius: 7, fill: false, yAxisID: 'yPercentage', tension: 0.3, zIndex: 10
+                    \t}},
+                    \t{{
+                        \ttype: 'bar', label: 'Cantidad de Hallazgos', data: dataCounts,
+                        \tbackgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: '#2563eb', borderWidth: 1, borderRadius: 5, yAxisID: 'yCount', zIndex: 5
+                    \t}}
                 ]
             }},
             options: {{
@@ -1381,7 +1396,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
     }};
     </script>
 </body></html>
-    """
+"""
     
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f: f.write(full_html)
     print(f"✅ REPORTE {titulo_dashboard} GUARDADO CON ÉXITO")
