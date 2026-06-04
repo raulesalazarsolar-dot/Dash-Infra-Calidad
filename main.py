@@ -194,7 +194,7 @@ def main():
             clase_str = limpiar(p.get("field_12")).title() or "General"
             
             clase_norm = normalizar_texto(clase_str)
-            if not any(x in clase_norm for x in ["calidad", "sanitizacion", "infraestructura"]):
+            if not any(x in clase_norm for x in ["calidad", "sanitizacion", "infraestructura", "produccion"]):
                 continue 
 
             tag_id = limpiar(p.get("LinkTitle"))
