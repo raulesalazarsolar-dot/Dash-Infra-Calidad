@@ -1140,7 +1140,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
             }}, 
             options: {{ 
                 ...commonOpts, cutout: '70%', 
-                plugins: {{ ...commonOpts.plugins, legend: {{ position: 'bottom' }} }}, 
+                plugins: {{ ...commonOpts.plugins, legend: {{ position: 'bottom' }}, datalabels: {{ display: true, color: '#fff', font: {{ weight: 'bold', size: 11 }}, formatter: (value, ctx) => {{ let sum = ctx.dataset.data.reduce((a, b) => a + b, 0); return value > 0 ? ((value * 100) / sum).toFixed(1) + '%' : ''; }} }} }}, 
                 onClick: (e, els, ch) => {{ 
                     if(els.length>0) {{
                         showDataModal(ch.data.labels[els[0].index], d => {{ 
@@ -1159,7 +1159,7 @@ def generar_html_moderno(db_json, titulo_dashboard):
         chartInstances['chart2'] = new Chart(getFreshCanvas('chart2'), {{ 
             type: 'pie', 
             data: {{ labels:Object.keys(stats.cCounts), datasets:[{{ data:Object.values(stats.cCounts), backgroundColor:['#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#d946ef','#f59e0b'], borderWidth: 1, borderColor: '#fff' }}] }}, 
-            options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, legend: {{ position: 'right' }} }}, onClick: (e, els, ch) => {{ if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => (d.clase || 'General') === ch.data.labels[els[0].index]); }} }}
+            options: {{ ...commonOpts, plugins: {{ ...commonOpts.plugins, legend: {{ position: 'right' }}, datalabels: {{ display: true, color: '#fff', font: {{ weight: 'bold', size: 11 }}, formatter: (value, ctx) => {{ let sum = ctx.dataset.data.reduce((a, b) => a + b, 0); return value > 0 ? ((value * 100) / sum).toFixed(1) + '%' : ''; }} }} }}, onClick: (e, els, ch) => {{ if(els.length>0) showDataModal(ch.data.labels[els[0].index], d => (d.clase || 'General') === ch.data.labels[els[0].index]); }} }}
         }});
 
         const sortedLocs = Object.entries(stats.loc).sort((a,b)=>b[1].total - a[1].total).slice(0, 20); 
@@ -1272,13 +1272,13 @@ def generar_html_moderno(db_json, titulo_dashboard):
                     
                     ctx.stroke();
                     ctx.restore();
-                }}
-            }},
-            onClick: (e, els, ch) => {{
-                if(els.length>0) {{
-                    const index = els[0].index;
-                    const dataPoint = ch.data.datasets[0].data[index];
-                    showDataModal('Ubicación: ' + dataPoint.label, d => d.ubicacion === dataPoint.label);
+                }},
+                onClick: (e, els, ch) => {{
+                    if(els.length>0) {{
+                        const index = els[0].index;
+                        const dataPoint = ch.data.datasets[0].data[index];
+                        showDataModal('Ubicación: ' + dataPoint.label, d => d.ubicacion === dataPoint.label);
+                    }}
                 }}
             }}
         }});
