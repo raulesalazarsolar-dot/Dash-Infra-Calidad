@@ -216,7 +216,7 @@ def main():
             obs2 = limpiar(p.get("field_15"))
             
             # ==============================================================
-            # LÓGICA DE ESTADOS ACTUALIZADA: PRECIERRE VS RECHAZOS
+            # LÓGICA DE ESTADOS ACTUALIZADA: UNIVERSAL PARA TODAS LAS ÁREAS
             # ==============================================================
             has_asignacion = bool(ejecutor and ejecutor.strip() and ejecutor.lower() != "sin asignar" and ejecutor != "0")
             
@@ -229,22 +229,18 @@ def main():
             has_cierre = estado_txt in estados_exito_cierre
             is_abierto = estado_txt in estados_abierto
             is_proceso = estado_txt in estados_en_proceso
-            is_calidad = "calidad" in clase_str.lower()
 
-            if is_calidad:
-                if has_cierre: 
-                    status = "realizada"
-                elif has_ejecutado and is_abierto: 
-                    status = "precierre"  # Ejecutado + Abierto
-                elif has_ejecutado and is_proceso:
-                    status = "rechazo"    # Ejecutado + En Proceso
-                else: 
-                    status = "pendiente"
-            else:
-                if has_cierre or has_ejecutado:
-                    status = "realizada"
-                else:
-                    status = "pendiente"
+            # Lógica unificada sin discriminar por área
+            if has_cierre: 
+                status = "realizada"
+            elif has_ejecutado and is_abierto: 
+                status = "precierre"  # Ejecutado + Abierto
+            elif has_ejecutado and is_proceso:
+                status = "rechazo"    # Ejecutado + En Proceso
+            elif has_ejecutado:
+                status = "realizada" 
+            else: 
+                status = "pendiente"
 
             # Lógica de criticidad
             if prio_raw: 
@@ -869,24 +865,21 @@ def generar_html_moderno(db_json, titulo_dashboard):
         else pl='<span class="prio-flag p-baja">🟢 Menor</span>';
         document.getElementById('d_prio_lbl').innerHTML = pl;
 
-        if (d.clase && d.clase.toLowerCase().includes('calidad')) {{
-            document.getElementById('ticket_progress_wrapper').style.display = 'block';
-            let stepsActive = 1; 
-            if (d.has_asignacion) stepsActive = 2;
-            if (d.has_ejecutado) stepsActive = 3;
-            if (d.has_cierre) stepsActive = 4;
-            
-            let fillWidth = ((stepsActive - 1) / 3) * 80;
-            document.getElementById('ticket_step_fill').style.width = fillWidth + '%';
-            
-            for(let i=1; i<=4; i++) {{
-                let el = document.getElementById('t_step_' + i);
-                el.classList.remove('active', 'current');
-                if (i <= stepsActive) el.classList.add('active');
-                if (i === stepsActive) el.classList.add('current');
-            }}
-        }} else {{
-            document.getElementById('ticket_progress_wrapper').style.display = 'none';
+        // Mostrar barra de progreso para todas las áreas (ya no solo calidad)
+        document.getElementById('ticket_progress_wrapper').style.display = 'block';
+        let stepsActive = 1; 
+        if (d.has_asignacion) stepsActive = 2;
+        if (d.has_ejecutado) stepsActive = 3;
+        if (d.has_cierre) stepsActive = 4;
+        
+        let fillWidth = ((stepsActive - 1) / 3) * 80;
+        document.getElementById('ticket_step_fill').style.width = fillWidth + '%';
+        
+        for(let i=1; i<=4; i++) {{
+            let el = document.getElementById('t_step_' + i);
+            el.classList.remove('active', 'current');
+            if (i <= stepsActive) el.classList.add('active');
+            if (i === stepsActive) el.classList.add('current');
         }}
 
         const grid = document.getElementById('d_grid');
@@ -1178,15 +1171,15 @@ def generar_html_moderno(db_json, titulo_dashboard):
             data: {{
                 labels: labelsLoc,
                 datasets: [
-                    \t{{
-                        \ttype: 'line', label: '% Acumulado', data: dataAcumulado,
-                        \tborderColor: '#ef4444', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#ef4444',
-                        \tpointRadius: 5, pointHoverRadius: 7, fill: false, yAxisID: 'yPercentage', tension: 0.3, zIndex: 10
-                    \t}},
-                    \t{{
-                        \ttype: 'bar', label: 'Cantidad de Hallazgos', data: dataCounts,
-                        \tbackgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: '#2563eb', borderWidth: 1, borderRadius: 5, yAxisID: 'yCount', zIndex: 5
-                    \t}}
+                    {{
+                        type: 'line', label: '% Acumulado', data: dataAcumulado,
+                        borderColor: '#ef4444', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#ef4444',
+                        pointRadius: 5, pointHoverRadius: 7, fill: false, yAxisID: 'yPercentage', tension: 0.3, zIndex: 10
+                    }},
+                    {{
+                        type: 'bar', label: 'Cantidad de Hallazgos', data: dataCounts,
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: '#2563eb', borderWidth: 1, borderRadius: 5, yAxisID: 'yCount', zIndex: 5
+                    }}
                 ]
             }},
             options: {{
